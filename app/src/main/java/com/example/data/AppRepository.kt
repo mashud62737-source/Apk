@@ -1,0 +1,287 @@
+package com.example.data
+
+import android.content.Context
+import com.example.data.local.AppDatabase
+import com.example.model.Comment
+import com.example.model.HashtagItem
+import com.example.model.NotificationItem
+import com.example.model.NotificationType
+import com.example.model.SoundItem
+import com.example.model.User
+import com.example.model.Video
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.launch
+import java.util.UUID
+
+class AppRepository(context: Context) {
+    private val database = AppDatabase.getInstance(context)
+    private val userDao = database.userDao()
+    private val videoDao = database.videoDao()
+    private val commentDao = database.commentDao()
+    private val notificationDao = database.notificationDao()
+
+    private val _currentUserId = MutableStateFlow("user_me")
+    val currentUserId: StateFlow<String> = _currentUserId.asStateFlow()
+
+    private val _currentUser = MutableStateFlow<User?>(null)
+    val currentUser: StateFlow<User?> = _currentUser.asStateFlow()
+
+    val allVideos: Flow<List<Video>> = videoDao.getAllVideos()
+    val followingVideos: Flow<List<Video>> = videoDao.getFollowingVideos()
+    val likedVideos: Flow<List<Video>> = videoDao.getLikedVideos()
+    val savedVideos: Flow<List<Video>> = videoDao.getSavedVideos()
+    val allUsers: Flow<List<User>> = userDao.getAllUsers()
+    val notifications: Flow<List<NotificationItem>> = notificationDao.getAllNotifications()
+
+    init {
+        CoroutineScope(Dispatchers.IO).launch {
+            seedDatabaseIfEmpty()
+            loadCurrentUser(_currentUserId.value)
+        }
+    }
+
+    private suspend fun seedDatabaseIfEmpty() {
+        val existingVideos = videoDao.getAllVideos().firstOrNull()
+        if (existingVideos.isNullOrEmpty()) {
+            userDao.insertUsers(SampleData.initialUsers)
+            videoDao.insertVideos(SampleData.initialVideos)
+            commentDao.insertComments(SampleData.initialComments)
+            notificationDao.insertNotifications(SampleData.initialNotifications)
+        }
+    }
+
+    private suspend fun loadCurrentUser(userId: String) {
+        val user = userDao.getUserByIdOnce(userId)
+        _currentUser.value = user
+    }
+
+    fun switchUser(userId: String) {
+        _currentUserId.value = userId
+        CoroutineScope(Dispatchers.IO).launch {
+            loadCurrentUser(userId)
+        }
+    }
+
+    fun getUser(userId: String): Flow<User?> = userDao.getUserById(userId)
+
+    fun getVideosByUser(userId: String): Flow<List<Video>> = videoDao.getVideosByUser(userId)
+
+    fun searchVideos(query: String): Flow<List<Video>> = videoDao.searchVideos(query)
+
+    fun searchUsers(query: String): Flow<List<User>> = userDao.searchUsers(query)
+
+    fun getCommentsForVideo(videoId: String): Flow<List<Comment>> = commentDao.getCommentsForVideo(videoId)
+
+    suspend fun incrementViewCount(videoId: String) {
+        videoDao.incrementViews(videoId)
+    }
+
+    suspend fun toggleVideoLike(video: Video) {
+        val newLikedState = !video.isLikedByMe
+        val delta = if (newLikedState) 1 else -1
+        videoDao.updateLike(video.id, newLikedState, delta)
+
+        // If liked, notify creator
+        if (newLikedState && video.userId != _currentUserId.value) {
+            val user = _currentUser.value ?: return
+            val notif = NotificationItem(
+                id = "notif_${UUID.randomUUID()}",
+                type = NotificationType.LIKE,
+                sourceUserId = user.id,
+                sourceUserName = user.displayName,
+                sourceUserAvatar = user.avatarUrl,
+                videoId = video.id,
+                videoThumbnail = video.thumbnailUrl,
+                message = "liked your video",
+                timestamp = System.currentTimeMillis(),
+                isRead = false
+            )
+            notificationDao.insertNotification(notif)
+        }
+    }
+
+    suspend fun toggleVideoSave(video: Video) {
+        val newSavedState = !video.isSavedByMe
+        videoDao.updateSave(video.id, newSavedState)
+    }
+
+    suspend fun toggleFollowCreator(creatorId: String, currentFollowStatus: Boolean) {
+        val newStatus = !currentFollowStatus
+        val creator = userDao.getUserByIdOnce(creatorId) ?: return
+        val delta = if (newStatus) 1 else -1
+        val updatedCreator = creator.copy(
+            isFollowedByMe = newStatus,
+            followerCount = (creator.followerCount + delta).coerceAtLeast(0)
+        )
+        userDao.updateUser(updatedCreator)
+        videoDao.updateCreatorFollowStatus(creatorId, newStatus)
+
+        // Update current user following count
+        val me = _currentUser.value
+        if (me != null) {
+            val updatedMe = me.copy(followingCount = (me.followingCount + delta).coerceAtLeast(0))
+            userDao.updateUser(updatedMe)
+            _currentUser.value = updatedMe
+        }
+
+        // Notification if followed
+        if (newStatus && creatorId != _currentUserId.value) {
+            val meUser = _currentUser.value ?: return
+            val notif = NotificationItem(
+                id = "notif_${UUID.randomUUID()}",
+                type = NotificationType.FOLLOW,
+                sourceUserId = meUser.id,
+                sourceUserName = meUser.displayName,
+                sourceUserAvatar = meUser.avatarUrl,
+                message = "started following you",
+                timestamp = System.currentTimeMillis(),
+                isRead = false
+            )
+            notificationDao.insertNotification(notif)
+        }
+    }
+
+    suspend fun addComment(videoId: String, text: String): Boolean {
+        val user = _currentUser.value ?: return false
+        val comment = Comment(
+            id = "c_${UUID.randomUUID()}",
+            videoId = videoId,
+            userId = user.id,
+            userName = user.displayName,
+            userHandle = user.username,
+            userAvatarUrl = user.avatarUrl,
+            text = text.trim(),
+            likesCount = 0,
+            isLikedByMe = false,
+            createdAt = System.currentTimeMillis()
+        )
+        commentDao.insertComment(comment)
+        videoDao.incrementCommentCount(videoId)
+
+        val video = videoDao.getVideoById(videoId)
+        if (video != null && video.userId != user.id) {
+            val notif = NotificationItem(
+                id = "notif_${UUID.randomUUID()}",
+                type = NotificationType.COMMENT,
+                sourceUserId = user.id,
+                sourceUserName = user.displayName,
+                sourceUserAvatar = user.avatarUrl,
+                videoId = video.id,
+                videoThumbnail = video.thumbnailUrl,
+                message = "commented: \"${text.take(30)}${if (text.length > 30) "..." else ""}\"",
+                timestamp = System.currentTimeMillis(),
+                isRead = false
+            )
+            notificationDao.insertNotification(notif)
+        }
+        return true
+    }
+
+    suspend fun toggleCommentLike(comment: Comment) {
+        val newLiked = !comment.isLikedByMe
+        val delta = if (newLiked) 1 else -1
+        commentDao.toggleCommentLike(comment.id, newLiked, delta)
+    }
+
+    suspend fun shareVideo(videoId: String) {
+        videoDao.incrementShareCount(videoId)
+    }
+
+    suspend fun uploadVideo(
+        videoUrl: String,
+        thumbnailUrl: String,
+        caption: String,
+        hashtags: List<String>,
+        musicTitle: String,
+        musicAuthor: String
+    ): Video? {
+        val user = _currentUser.value ?: return null
+        val newVideo = Video(
+            id = "vid_${UUID.randomUUID()}",
+            userId = user.id,
+            userHandle = user.username,
+            userName = user.displayName,
+            userAvatarUrl = user.avatarUrl,
+            videoUrl = videoUrl,
+            thumbnailUrl = thumbnailUrl,
+            caption = caption,
+            hashtags = hashtags,
+            musicTitle = musicTitle,
+            musicAuthor = musicAuthor,
+            likesCount = 0,
+            commentsCount = 0,
+            sharesCount = 0,
+            viewsCount = 1,
+            isLikedByMe = false,
+            isSavedByMe = false,
+            isFollowedCreator = false,
+            createdAt = System.currentTimeMillis()
+        )
+        videoDao.insertVideo(newVideo)
+        return newVideo
+    }
+
+    suspend fun deleteVideo(videoId: String) {
+        videoDao.deleteVideo(videoId)
+    }
+
+    suspend fun togglePinVideo(videoId: String, isPinned: Boolean) {
+        videoDao.togglePin(videoId, isPinned)
+    }
+
+    suspend fun toggleReportVideo(videoId: String, isReported: Boolean) {
+        videoDao.toggleReport(videoId, isReported)
+    }
+
+    suspend fun updateProfile(displayName: String, username: String, bio: String, avatarUrl: String) {
+        val user = _currentUser.value ?: return
+        val updated = user.copy(
+            displayName = displayName,
+            username = username,
+            bio = bio,
+            avatarUrl = if (avatarUrl.isNotEmpty()) avatarUrl else user.avatarUrl
+        )
+        userDao.updateUser(updated)
+        _currentUser.value = updated
+    }
+
+    suspend fun registerUser(username: String, displayName: String, email: String, bio: String): User {
+        val newUser = User(
+            id = "user_${UUID.randomUUID().toString().take(8)}",
+            username = username.lowercase().replace(" ", "_"),
+            displayName = displayName,
+            avatarUrl = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80",
+            bio = if (bio.isNotEmpty()) bio else "Hey! I'm using TokTok 📱",
+            followerCount = 0,
+            followingCount = 0,
+            likesCount = 0,
+            isFollowedByMe = false,
+            isVerified = false,
+            isAdmin = false,
+            email = email,
+            joinedDate = "August 2026"
+        )
+        userDao.insertUser(newUser)
+        _currentUserId.value = newUser.id
+        _currentUser.value = newUser
+        return newUser
+    }
+
+    suspend fun markNotificationAsRead(id: String) {
+        notificationDao.markAsRead(id)
+    }
+
+    suspend fun markAllNotificationsAsRead() {
+        notificationDao.markAllAsRead()
+    }
+
+    fun getTrendingHashtags(): List<HashtagItem> = SampleData.trendingHashtags
+
+    fun getPopularSounds(): List<SoundItem> = SampleData.popularSounds
+}
