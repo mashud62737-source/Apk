@@ -1,5 +1,5 @@
 {
-  "name": "TokTok",
+  "name": "BDTOK",
   "description": "A modern short-video social media platform with full-screen feed, video uploads, profile, search, activity notifications, and creator admin panel.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

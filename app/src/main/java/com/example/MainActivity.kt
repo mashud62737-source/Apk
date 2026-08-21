@@ -283,11 +283,8 @@ fun TokTokApp(
 
                 ScreenTab.ADMIN -> {
                     AdminScreen(
-                        videos = allVideos,
-                        users = allUsers,
-                        onBack = { currentTab = ScreenTab.PROFILE },
-                        onDeleteVideo = { videoId -> viewModel.deleteVideo(videoId) },
-                        onTogglePin = { videoId, isPinned -> viewModel.togglePinVideo(videoId, isPinned) }
+                        viewModel = viewModel,
+                        onBack = { currentTab = ScreenTab.PROFILE }
                     )
                 }
             }

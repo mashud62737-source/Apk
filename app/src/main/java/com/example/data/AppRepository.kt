@@ -417,7 +417,404 @@ class AppRepository(context: Context) {
         notificationDao.markAllAsRead()
     }
 
+    private val _adConfig = MutableStateFlow(com.example.model.PlatformAdConfig())
+    val adConfig: StateFlow<com.example.model.PlatformAdConfig> = _adConfig.asStateFlow()
+
+    val reportedVideos: Flow<List<Video>> = videoDao.getReportedVideos()
+    val pendingNidUsers: Flow<List<User>> = userDao.getPendingNidUsers()
+
     fun getTrendingHashtags(): List<HashtagItem> = SampleData.trendingHashtags
     fun getPopularSounds(): List<SoundItem> = SampleData.popularSounds
     fun getVideoCategories(): List<VideoCategory> = SampleData.videoCategories
+
+    // === MASTER CREATOR / ADMIN OPERATIONS ===
+
+    suspend fun adminDeleteUser(userId: String) {
+        // Delete user's videos and user profile
+        videoDao.deleteVideosByUser(userId)
+        userDao.deleteUser(userId)
+        if (_currentUserId.value == userId) {
+            _currentUserId.value = "user_me"
+            loadCurrentUser("user_me")
+        }
+    }
+
+    suspend fun adminUpdateUser(user: User) {
+        userDao.updateUser(user)
+        if (user.id == _currentUserId.value) {
+            _currentUser.value = user
+        }
+    }
+
+    suspend fun adminReviewNid(userId: String, isApproved: Boolean) {
+        val user = userDao.getUserByIdOnce(userId) ?: return
+        val updated = user.copy(
+            isVerified = isApproved,
+            nidStatus = if (isApproved) "VERIFIED" else "REJECTED"
+        )
+        userDao.updateUser(updated)
+        if (userId == _currentUserId.value) {
+            _currentUser.value = updated
+        }
+
+        // Notify user of decision
+        val notif = NotificationItem(
+            id = "notif_review_${UUID.randomUUID()}",
+            type = NotificationType.VERIFICATION,
+            sourceUserId = "system_bdtok",
+            sourceUserName = "BDTOK Master Creator Team",
+            sourceUserAvatar = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200&auto=format&fit=crop&q=80",
+            message = if (isApproved)
+                "🎉 Your Blue Tick verification request was approved by the Master Admin! You are now Verified ✅"
+            else
+                "❌ Your verification request was rejected after review by the Admin Team.",
+            timestamp = System.currentTimeMillis(),
+            isRead = false
+        )
+        notificationDao.insertNotification(notif)
+    }
+
+    suspend fun adminToggleUserVerified(userId: String, isVerified: Boolean) {
+        userDao.setUserVerified(userId, isVerified, if (isVerified) "VERIFIED" else "UNVERIFIED")
+        if (userId == _currentUserId.value) {
+            val user = userDao.getUserByIdOnce(userId)
+            _currentUser.value = user
+        }
+    }
+
+    suspend fun adminToggleUserAdmin(userId: String, isAdmin: Boolean) {
+        userDao.setUserAdmin(userId, isAdmin)
+        if (userId == _currentUserId.value) {
+            val user = userDao.getUserByIdOnce(userId)
+            _currentUser.value = user
+        }
+    }
+
+    suspend fun adminToggleUserBan(userId: String, isBanned: Boolean) {
+        userDao.setUserBanned(userId, isBanned)
+        if (userId == _currentUserId.value) {
+            val user = userDao.getUserByIdOnce(userId)
+            _currentUser.value = user
+        }
+    }
+
+    suspend fun adminBoostFollowers(userId: String, boostCount: Int) {
+        userDao.boostFollowers(userId, boostCount)
+        if (userId == _currentUserId.value) {
+            val user = userDao.getUserByIdOnce(userId)
+            _currentUser.value = user
+        }
+    }
+
+    suspend fun adminSetVideoPrivacy(videoId: String, isPrivate: Boolean) {
+        videoDao.updateVideoPrivacy(videoId, isPrivate)
+    }
+
+    suspend fun adminClearVideoReport(videoId: String) {
+        videoDao.clearVideoReport(videoId)
+    }
+
+    suspend fun adminUpdateVideoMetrics(videoId: String, views: Int, likes: Int) {
+        videoDao.updateVideoMetrics(videoId, views, likes)
+    }
+
+    fun adminUpdateAdConfig(config: com.example.model.PlatformAdConfig) {
+        _adConfig.value = config
+    }
+
+    suspend fun adminBroadcastSystemAnnouncement(title: String, message: String) {
+        val notif = NotificationItem(
+            id = "broadcast_${UUID.randomUUID()}",
+            type = NotificationType.SYSTEM,
+            sourceUserId = "creator_mashud",
+            sourceUserName = "BDTOK Master Broadcast 📢",
+            sourceUserAvatar = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200&auto=format&fit=crop&q=80",
+            message = "$title: $message",
+            timestamp = System.currentTimeMillis(),
+            isRead = false
+        )
+        notificationDao.insertNotification(notif)
+    }
+
+    // === DATABASE DOWNLOAD, EXPORT & BACKUP/RESTORE ENGINE ===
+
+    data class DatabaseStats(
+        val usersCount: Int = 0,
+        val videosCount: Int = 0,
+        val commentsCount: Int = 0,
+        val notificationsCount: Int = 0,
+        val messagesCount: Int = 0,
+        val totalEntities: Int = 0,
+        val lastExportTimestamp: Long = System.currentTimeMillis()
+    )
+
+    suspend fun getDatabaseStats(): DatabaseStats {
+        val uCount = userDao.getUserCount()
+        val vCount = videoDao.getVideoCount()
+        val cCount = commentDao.getCommentCount()
+        val nCount = notificationDao.getNotificationCount()
+        val mCount = directMessageDao.getMessageCount()
+        val total = uCount + vCount + cCount + nCount + mCount
+        return DatabaseStats(
+            usersCount = uCount,
+            videosCount = vCount,
+            commentsCount = cCount,
+            notificationsCount = nCount,
+            messagesCount = mCount,
+            totalEntities = total
+        )
+    }
+
+    suspend fun exportCompleteDatabaseToJson(): String {
+        val root = org.json.JSONObject()
+        root.put("app", "BDTOK Android App")
+        root.put("version", "34.2.0")
+        root.put("timestamp", System.currentTimeMillis())
+        root.put("exportDate", java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date()))
+        root.put("masterCreator", "Mashud • mashud62737@gmail.com")
+
+        // 1. Users
+        val usersList = userDao.getAllUsers().firstOrNull() ?: emptyList()
+        val usersArr = org.json.JSONArray()
+        for (u in usersList) {
+            val uObj = org.json.JSONObject()
+            uObj.put("id", u.id)
+            uObj.put("username", u.username)
+            uObj.put("displayName", u.displayName)
+            uObj.put("email", u.email)
+            uObj.put("avatarUrl", u.avatarUrl)
+            uObj.put("bio", u.bio)
+            uObj.put("followerCount", u.followerCount)
+            uObj.put("followingCount", u.followingCount)
+            uObj.put("likesCount", u.likesCount)
+            uObj.put("isVerified", u.isVerified)
+            uObj.put("verifiedCategory", u.verifiedCategory)
+            uObj.put("isAdmin", u.isAdmin)
+            uObj.put("nidStatus", u.nidStatus)
+            uObj.put("nidNumber", u.nidNumber ?: "")
+            uObj.put("isPrivateAccount", u.isPrivateAccount)
+            uObj.put("isBanned", u.isBanned)
+            usersArr.put(uObj)
+        }
+        root.put("users", usersArr)
+
+        // 2. Videos
+        val videosList = videoDao.getAllVideos().firstOrNull() ?: emptyList()
+        val videosArr = org.json.JSONArray()
+        for (v in videosList) {
+            val vObj = org.json.JSONObject()
+            vObj.put("id", v.id)
+            vObj.put("userId", v.userId)
+            vObj.put("userName", v.userName)
+            vObj.put("userHandle", v.userHandle)
+            vObj.put("userAvatarUrl", v.userAvatarUrl)
+            vObj.put("videoUrl", v.videoUrl)
+            vObj.put("thumbnailUrl", v.thumbnailUrl)
+            vObj.put("caption", v.caption)
+            vObj.put("musicTitle", v.musicTitle)
+            vObj.put("musicAuthor", v.musicAuthor)
+            vObj.put("likesCount", v.likesCount)
+            vObj.put("commentsCount", v.commentsCount)
+            vObj.put("sharesCount", v.sharesCount)
+            vObj.put("viewsCount", v.viewsCount)
+            vObj.put("category", v.category)
+            vObj.put("isPrivate", v.isPrivate)
+            vObj.put("isPinned", v.isPinned)
+            vObj.put("isReported", v.isReported)
+            videosArr.put(vObj)
+        }
+        root.put("videos", videosArr)
+
+        // 3. Comments
+        val commentsList = commentDao.getAllComments().firstOrNull() ?: emptyList()
+        val commentsArr = org.json.JSONArray()
+        for (c in commentsList) {
+            val cObj = org.json.JSONObject()
+            cObj.put("id", c.id)
+            cObj.put("videoId", c.videoId)
+            cObj.put("userId", c.userId)
+            cObj.put("userName", c.userName)
+            cObj.put("userAvatarUrl", c.userAvatarUrl)
+            cObj.put("text", c.text)
+            cObj.put("likesCount", c.likesCount)
+            cObj.put("createdAt", c.createdAt)
+            commentsArr.put(cObj)
+        }
+        root.put("comments", commentsArr)
+
+        // 4. Notifications
+        val notifsList = notificationDao.getAllNotifications().firstOrNull() ?: emptyList()
+        val notifsArr = org.json.JSONArray()
+        for (n in notifsList) {
+            val nObj = org.json.JSONObject()
+            nObj.put("id", n.id)
+            nObj.put("type", n.type.name)
+            nObj.put("sourceUserId", n.sourceUserId)
+            nObj.put("sourceUserName", n.sourceUserName)
+            nObj.put("message", n.message)
+            nObj.put("timestamp", n.timestamp)
+            notifsArr.put(nObj)
+        }
+        root.put("notifications", notifsArr)
+
+        // 5. Ad Config
+        val currentAd = _adConfig.value
+        val adObj = org.json.JSONObject()
+        adObj.put("isEnabled", currentAd.isEnabled)
+        adObj.put("sponsorName", currentAd.sponsorName)
+        adObj.put("headline", currentAd.headline)
+        adObj.put("ctaText", currentAd.ctaText)
+        adObj.put("targetUrl", currentAd.targetUrl)
+        adObj.put("frequency", currentAd.frequency)
+        root.put("platformAdConfig", adObj)
+
+        return root.toString(2)
+    }
+
+    suspend fun exportUserPersonalDataToJson(userId: String): String {
+        val root = org.json.JSONObject()
+        val user = userDao.getUserByIdOnce(userId)
+        val userVideos = videoDao.getVideosByUser(userId).firstOrNull() ?: emptyList()
+        val userMessages = directMessageDao.getAllMessagesForUser(userId).firstOrNull() ?: emptyList()
+
+        root.put("appName", "BDTOK Social Video")
+        root.put("requestDate", java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date()))
+        root.put("userStatus", if (user?.isVerified == true) "Verified Creator ✅" else "Standard User")
+
+        if (user != null) {
+            val profile = org.json.JSONObject()
+            profile.put("id", user.id)
+            profile.put("username", user.username)
+            profile.put("displayName", user.displayName)
+            profile.put("email", user.email)
+            profile.put("bio", user.bio)
+            profile.put("followers", user.followerCount)
+            profile.put("following", user.followingCount)
+            profile.put("totalLikes", user.likesCount)
+            profile.put("isPrivate", user.isPrivateAccount)
+            root.put("profile", profile)
+        }
+
+        val videosArr = org.json.JSONArray()
+        for (v in userVideos) {
+            val vObj = org.json.JSONObject()
+            vObj.put("id", v.id)
+            vObj.put("caption", v.caption)
+            vObj.put("musicTitle", v.musicTitle)
+            vObj.put("views", v.viewsCount)
+            vObj.put("likes", v.likesCount)
+            vObj.put("comments", v.commentsCount)
+            vObj.put("videoUrl", v.videoUrl)
+            videosArr.put(vObj)
+        }
+        root.put("myVideos", videosArr)
+
+        val msgsArr = org.json.JSONArray()
+        for (m in userMessages) {
+            val mObj = org.json.JSONObject()
+            mObj.put("id", m.id)
+            mObj.put("senderId", m.senderId)
+            mObj.put("receiverId", m.receiverId)
+            mObj.put("text", m.text)
+            mObj.put("timestamp", m.timestamp)
+            msgsArr.put(mObj)
+        }
+        root.put("directMessages", msgsArr)
+
+        return root.toString(2)
+    }
+
+    suspend fun importDatabaseFromJson(jsonString: String): Boolean {
+        return try {
+            val root = org.json.JSONObject(jsonString)
+
+            if (root.has("users")) {
+                val usersArr = root.getJSONArray("users")
+                val parsedUsers = mutableListOf<User>()
+                for (i in 0 until usersArr.length()) {
+                    val u = usersArr.getJSONObject(i)
+                    parsedUsers.add(
+                        User(
+                            id = u.optString("id", UUID.randomUUID().toString()),
+                            username = u.optString("username", "user_$i"),
+                            displayName = u.optString("displayName", "User $i"),
+                            email = u.optString("email", ""),
+                            avatarUrl = u.optString("avatarUrl", "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200"),
+                            bio = u.optString("bio", ""),
+                            followerCount = u.optInt("followerCount", 0),
+                            followingCount = u.optInt("followingCount", 0),
+                            likesCount = u.optInt("likesCount", 0),
+                            isVerified = u.optBoolean("isVerified", false),
+                            verifiedCategory = u.optString("verifiedCategory", "Creator"),
+                            isAdmin = u.optBoolean("isAdmin", false),
+                            nidStatus = u.optString("nidStatus", "UNVERIFIED"),
+                            nidNumber = u.optString("nidNumber", null),
+                            isPrivateAccount = u.optBoolean("isPrivateAccount", false),
+                            isBanned = u.optBoolean("isBanned", false)
+                        )
+                    )
+                }
+                if (parsedUsers.isNotEmpty()) {
+                    userDao.deleteAllUsers()
+                    userDao.insertUsers(parsedUsers)
+                }
+            }
+
+            if (root.has("videos")) {
+                val videosArr = root.getJSONArray("videos")
+                val parsedVideos = mutableListOf<Video>()
+                for (i in 0 until videosArr.length()) {
+                    val v = videosArr.getJSONObject(i)
+                    parsedVideos.add(
+                        Video(
+                            id = v.optString("id", UUID.randomUUID().toString()),
+                            userId = v.optString("userId", "user_me"),
+                            userName = v.optString("userName", "Creator"),
+                            userHandle = v.optString("userHandle", "creator"),
+                            userAvatarUrl = v.optString("userAvatarUrl", "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200"),
+                            videoUrl = v.optString("videoUrl", "android.resource://com.example/raw/sample_video"),
+                            thumbnailUrl = v.optString("thumbnailUrl", "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800"),
+                            caption = v.optString("caption", "BDTOK clip"),
+                            musicTitle = v.optString("musicTitle", "Original Sound - BDTOK"),
+                            musicAuthor = v.optString("musicAuthor", "BDTOK Sound"),
+                            likesCount = v.optInt("likesCount", 0),
+                            commentsCount = v.optInt("commentsCount", 0),
+                            sharesCount = v.optInt("sharesCount", 0),
+                            viewsCount = v.optInt("viewsCount", 0),
+                            category = v.optString("category", "Trending"),
+                            isPrivate = v.optBoolean("isPrivate", false),
+                            isPinned = v.optBoolean("isPinned", false),
+                            isReported = v.optBoolean("isReported", false)
+                        )
+                    )
+                }
+                if (parsedVideos.isNotEmpty()) {
+                    videoDao.deleteAllVideos()
+                    videoDao.insertVideos(parsedVideos)
+                }
+            }
+
+            loadCurrentUser(_currentUserId.value)
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    suspend fun resetDatabaseToDefaults() {
+        userDao.deleteAllUsers()
+        videoDao.deleteAllVideos()
+        commentDao.deleteAllComments()
+        notificationDao.deleteAllNotifications()
+        directMessageDao.deleteAllMessages()
+
+        userDao.insertUsers(SampleData.initialUsers)
+        videoDao.insertVideos(SampleData.initialVideos)
+        commentDao.insertComments(SampleData.initialComments)
+        notificationDao.insertNotifications(SampleData.initialNotifications)
+
+        _currentUserId.value = "user_me"
+        loadCurrentUser("user_me")
+    }
 }

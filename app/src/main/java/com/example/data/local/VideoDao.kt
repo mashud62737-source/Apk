@@ -66,4 +66,25 @@ interface VideoDao {
 
     @Query("UPDATE videos SET isReported = :isReported WHERE id = :videoId")
     suspend fun toggleReport(videoId: String, isReported: Boolean)
+
+    @Query("DELETE FROM videos WHERE userId = :userId")
+    suspend fun deleteVideosByUser(userId: String)
+
+    @Query("UPDATE videos SET isPrivate = :isPrivate WHERE id = :videoId")
+    suspend fun updateVideoPrivacy(videoId: String, isPrivate: Boolean)
+
+    @Query("UPDATE videos SET isReported = 0 WHERE id = :videoId")
+    suspend fun clearVideoReport(videoId: String)
+
+    @Query("UPDATE videos SET viewsCount = :views, likesCount = :likes WHERE id = :videoId")
+    suspend fun updateVideoMetrics(videoId: String, views: Int, likes: Int)
+
+    @Query("SELECT * FROM videos WHERE isReported = 1")
+    fun getReportedVideos(): Flow<List<Video>>
+
+    @Query("DELETE FROM videos")
+    suspend fun deleteAllVideos()
+
+    @Query("SELECT COUNT(*) FROM videos")
+    suspend fun getVideoCount(): Int
 }

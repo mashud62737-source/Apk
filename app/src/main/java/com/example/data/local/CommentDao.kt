@@ -23,4 +23,13 @@ interface CommentDao {
 
     @Query("UPDATE comments SET likesCount = likesCount + :delta, isLikedByMe = :isLiked WHERE id = :commentId")
     suspend fun toggleCommentLike(commentId: String, isLiked: Boolean, delta: Int)
+
+    @Query("SELECT * FROM comments")
+    fun getAllComments(): Flow<List<Comment>>
+
+    @Query("DELETE FROM comments")
+    suspend fun deleteAllComments()
+
+    @Query("SELECT COUNT(*) FROM comments")
+    suspend fun getCommentCount(): Int
 }

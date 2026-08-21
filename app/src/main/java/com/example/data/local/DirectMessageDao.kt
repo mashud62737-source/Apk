@@ -23,4 +23,16 @@ interface DirectMessageDao {
 
     @Query("DELETE FROM direct_messages WHERE (senderId = :userId1 AND receiverId = :userId2) OR (senderId = :userId2 AND receiverId = :userId1)")
     suspend fun deleteConversation(userId1: String, userId2: String)
+
+    @Query("SELECT * FROM direct_messages")
+    fun getAllMessages(): Flow<List<DirectMessage>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMessages(messages: List<DirectMessage>)
+
+    @Query("DELETE FROM direct_messages")
+    suspend fun deleteAllMessages()
+
+    @Query("SELECT COUNT(*) FROM direct_messages")
+    suspend fun getMessageCount(): Int
 }

@@ -39,6 +39,12 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Storage
+import android.content.Intent
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Favorite
@@ -60,6 +66,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -120,6 +127,7 @@ fun SettingsScreen(
 
     // Sheet states for all TikTok Settings
     var showAccountDetailsSheet by remember { mutableStateOf(false) }
+    var showDownloadDataSheet by remember { mutableStateOf(false) }
     var showPrivacySheet by remember { mutableStateOf(false) }
     var showSecuritySheet by remember { mutableStateOf(false) }
     var showQrCodeSheet by remember { mutableStateOf(false) }
@@ -311,8 +319,19 @@ fun SettingsScreen(
                     icon = Icons.Default.Person,
                     iconTint = Color(0xFF42A5F5),
                     title = "Account",
-                    subtitle = "User information, Email, Phone, Password, Download data",
+                    subtitle = "User information, Email, Phone, Password",
                     onClick = { showAccountDetailsSheet = true }
+                )
+            }
+
+            // Download your data
+            item {
+                SettingsTile(
+                    icon = Icons.Default.Download,
+                    iconTint = Color(0xFF26A69A),
+                    title = "Download your data",
+                    subtitle = "Get a copy of your BDTOK profile, videos, messages and activity data",
+                    onClick = { showDownloadDataSheet = true }
                 )
             }
 
@@ -623,6 +642,15 @@ fun SettingsScreen(
                 showAccountDetailsSheet = false
                 Toast.makeText(context, "Account details saved!", Toast.LENGTH_SHORT).show()
             }
+        )
+    }
+
+    // 1b. Download Data Sheet
+    if (showDownloadDataSheet && currentUser != null) {
+        DownloadDataSheet(
+            user = currentUser!!,
+            viewModel = viewModel,
+            onDismiss = { showDownloadDataSheet = false }
         )
     }
 
@@ -3156,6 +3184,182 @@ fun TermsPolicySheet(onDismiss: () -> Unit) {
                     .height(48.dp)
             ) {
                 Text("Close", fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+/**
+ * 1b. Download Data Sheet (BDTOK Account & User Database Export)
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DownloadDataSheet(
+    user: User,
+    viewModel: MainViewModel,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    var exportedDataJson by remember { mutableStateOf<String?>(null) }
+    var isGenerating by remember { mutableStateOf(false) }
+    var dataFormat by remember { mutableStateOf("JSON") } // TXT or JSON
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp)
+                .padding(bottom = 32.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF26A69A).copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Download,
+                        contentDescription = null,
+                        tint = Color(0xFF26A69A),
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = "Download your BDTOK Data",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Get a copy of your personal data file",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+
+            Text(
+                text = "Your downloaded file will include:\n• Your profile details (name, username, bio, verification status)\n• Your uploaded videos, view counts, and engagement stats\n• Your direct messages and comment activity\n• Your account settings and privacy preferences",
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 18.sp
+            )
+
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Select File Format", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        FilterChip(
+                            selected = dataFormat == "JSON",
+                            onClick = { dataFormat = "JSON" },
+                            label = { Text("JSON (Machine-readable / Backup)") }
+                        )
+                        FilterChip(
+                            selected = dataFormat == "TXT",
+                            onClick = { dataFormat = "TXT" },
+                            label = { Text("TXT (Readable text)") }
+                        )
+                    }
+                }
+            }
+
+            Button(
+                onClick = {
+                    isGenerating = true
+                    viewModel.exportUserData(user.id) { json ->
+                        exportedDataJson = json
+                        isGenerating = false
+                        Toast.makeText(context, "🎉 Your BDTOK Data file is ready!", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = TokTokPink),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+            ) {
+                Icon(imageVector = Icons.Default.Download, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (isGenerating) "Compiling your data..." else "Request & Download Data",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp
+                )
+            }
+
+            if (exportedDataJson != null) {
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF00C853).copy(alpha = 0.1f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF00C853))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Data File Ready (${exportedDataJson!!.length} bytes)", fontWeight = FontWeight.Bold, color = Color(0xFF00C853))
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    val sendIntent = Intent().apply {
+                                        action = Intent.ACTION_SEND
+                                        putExtra(Intent.EXTRA_TEXT, exportedDataJson)
+                                        putExtra(Intent.EXTRA_TITLE, "${user.username}_BDTOK_Data.json")
+                                        type = "text/plain"
+                                    }
+                                    val shareIntent = Intent.createChooser(sendIntent, "Save / Share Data File")
+                                    context.startActivity(shareIntent)
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(imageVector = Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Save / Share", fontSize = 12.sp)
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    clipboardManager.setText(AnnotatedString(exportedDataJson!!))
+                                    Toast.makeText(context, "Data copied to clipboard!", Toast.LENGTH_SHORT).show()
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(imageVector = Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Copy", fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
             }
         }
     }

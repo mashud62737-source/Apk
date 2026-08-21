@@ -247,6 +247,117 @@ class MainViewModel(private val repository: AppRepository) : ViewModel() {
             repository.markAllNotificationsAsRead()
         }
     }
+
+    val reportedVideos: Flow<List<Video>> = repository.reportedVideos
+    val pendingNidUsers: Flow<List<User>> = repository.pendingNidUsers
+    val adConfig: StateFlow<com.example.model.PlatformAdConfig> = repository.adConfig
+
+    // Admin operations
+    fun adminDeleteUser(userId: String) {
+        viewModelScope.launch {
+            repository.adminDeleteUser(userId)
+        }
+    }
+
+    fun adminUpdateUser(user: User) {
+        viewModelScope.launch {
+            repository.adminUpdateUser(user)
+        }
+    }
+
+    fun adminReviewNid(userId: String, isApproved: Boolean) {
+        viewModelScope.launch {
+            repository.adminReviewNid(userId, isApproved)
+        }
+    }
+
+    fun adminToggleUserVerified(userId: String, isVerified: Boolean) {
+        viewModelScope.launch {
+            repository.adminToggleUserVerified(userId, isVerified)
+        }
+    }
+
+    fun adminToggleUserAdmin(userId: String, isAdmin: Boolean) {
+        viewModelScope.launch {
+            repository.adminToggleUserAdmin(userId, isAdmin)
+        }
+    }
+
+    fun adminToggleUserBan(userId: String, isBanned: Boolean) {
+        viewModelScope.launch {
+            repository.adminToggleUserBan(userId, isBanned)
+        }
+    }
+
+    fun adminBoostFollowers(userId: String, boostCount: Int) {
+        viewModelScope.launch {
+            repository.adminBoostFollowers(userId, boostCount)
+        }
+    }
+
+    fun adminSetVideoPrivacy(videoId: String, isPrivate: Boolean) {
+        viewModelScope.launch {
+            repository.adminSetVideoPrivacy(videoId, isPrivate)
+        }
+    }
+
+    fun adminClearVideoReport(videoId: String) {
+        viewModelScope.launch {
+            repository.adminClearVideoReport(videoId)
+        }
+    }
+
+    fun adminUpdateVideoMetrics(videoId: String, views: Int, likes: Int) {
+        viewModelScope.launch {
+            repository.adminUpdateVideoMetrics(videoId, views, likes)
+        }
+    }
+
+    fun adminUpdateAdConfig(config: com.example.model.PlatformAdConfig) {
+        repository.adminUpdateAdConfig(config)
+    }
+
+    fun adminBroadcastAnnouncement(title: String, message: String) {
+        viewModelScope.launch {
+            repository.adminBroadcastSystemAnnouncement(title, message)
+        }
+    }
+
+    // Database & Data Download / Export operations
+    fun exportCompleteDatabase(onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            val json = repository.exportCompleteDatabaseToJson()
+            onResult(json)
+        }
+    }
+
+    fun exportUserData(userId: String, onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            val json = repository.exportUserPersonalDataToJson(userId)
+            onResult(json)
+        }
+    }
+
+    fun importDatabaseFromJson(json: String, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val success = repository.importDatabaseFromJson(json)
+            onResult(success)
+        }
+    }
+
+    fun resetDatabase(onComplete: () -> Unit) {
+        viewModelScope.launch {
+            repository.resetDatabaseToDefaults()
+            onComplete()
+        }
+    }
+
+    fun fetchDatabaseStats(onResult: (AppRepository.DatabaseStats) -> Unit) {
+        viewModelScope.launch {
+            val stats = repository.getDatabaseStats()
+            onResult(stats)
+        }
+    }
 }
 
 class MainViewModelFactory(private val repository: AppRepository) : ViewModelProvider.Factory {

@@ -31,7 +31,8 @@ data class User(
     val allowDownloads: Boolean = true,
     val allowDuet: Boolean = true,
     val allowStitch: Boolean = true,
-    val filterComments: Boolean = false
+    val filterComments: Boolean = false,
+    val isBanned: Boolean = false
 )
 
 @Entity(tableName = "videos")
@@ -57,7 +58,11 @@ data class Video(
     val isFollowedCreator: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
     val isPinned: Boolean = false,
-    val isReported: Boolean = false
+    val isReported: Boolean = false,
+    val isPrivate: Boolean = false,
+    val isAd: Boolean = false,
+    val adCtaText: String? = null,
+    val adTargetUrl: String? = null
 )
 
 @Entity(tableName = "comments")
@@ -131,4 +136,14 @@ data class VideoCategory(
     val title: String,
     val iconEmoji: String,
     val description: String
+)
+
+data class PlatformAdConfig(
+    val isEnabled: Boolean = true,
+    val sponsorName: String = "BDTOK Official Sponsor",
+    val headline: String = "Discover Trending Bangladeshi Creators & Brands",
+    val ctaText: String = "Learn More",
+    val targetUrl: String = "https://bdtok.app",
+    val bannerUrl: String = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=80",
+    val frequency: Int = 4 // Show every 4th item
 )
