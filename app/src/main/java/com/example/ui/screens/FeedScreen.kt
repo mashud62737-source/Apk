@@ -22,6 +22,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
@@ -48,9 +49,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.algorithm.AlgoRecommendationInsight
+import com.example.algorithm.PlaybackTelemetry
 import com.example.model.Comment
 import com.example.model.User
 import com.example.model.Video
+import com.example.ui.components.AlgoInsightsBottomSheet
 import com.example.ui.components.CommentsBottomSheet
 import com.example.ui.components.HeartBurstAnimation
 import com.example.ui.components.HeartEffect
@@ -84,7 +88,11 @@ fun FeedScreen(
     onIncrementViews: (String) -> Unit,
     onCreatorClick: (String) -> Unit,
     onSearchClick: () -> Unit,
-    onHashtagClick: (String) -> Unit
+    onHashtagClick: (String) -> Unit,
+    onGetAlgoInsight: (Video) -> AlgoRecommendationInsight = { video ->
+        com.example.algorithm.RecommendationEngine.evaluateVideo("user_me", video, null)
+    },
+    onRecordTelemetry: (Video, PlaybackTelemetry) -> Unit = { _, _ -> }
 ) {
     var selectedFeedType by remember { mutableStateOf(FeedType.FOR_YOU) }
     val displayVideos = if (selectedFeedType == FeedType.FOR_YOU) forYouVideos else followingVideos
@@ -103,13 +111,26 @@ fun FeedScreen(
     var showShareSheet by remember { mutableStateOf(false) }
     var activeVideoForShare by remember { mutableStateOf<Video?>(null) }
 
+    val algoSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var showAlgoSheet by remember { mutableStateOf(false) }
+    var activeVideoForAlgo by remember { mutableStateOf<Video?>(null) }
+
     val heartAnimations = remember { mutableStateListOf<HeartEffect>() }
 
-    // Track active video view count
+    // Track active video view count & baseline watch telemetry
     LaunchedEffect(pagerState.currentPage, displayVideos.size) {
         if (displayVideos.isNotEmpty() && pagerState.currentPage < displayVideos.size) {
             val currentVideo = displayVideos[pagerState.currentPage]
             onIncrementViews(currentVideo.id)
+            onRecordTelemetry(
+                currentVideo,
+                PlaybackTelemetry(
+                    videoId = currentVideo.id,
+                    watchTimeMs = 5000,
+                    durationMs = 15000,
+                    isCompleted = false
+                )
+            )
         }
     }
 
@@ -171,7 +192,7 @@ fun FeedScreen(
                         video = video,
                         isPlaying = isCurrentPage,
                         isMuted = isMuted,
-                        onSingleTap = { /* Play/Pause is handled internally */ },
+                        onSingleTap = { /* Play/Pause handled internally */ },
                         onDoubleTap = { tapOffset ->
                             onToggleLike(video)
                             heartAnimations.add(
@@ -211,7 +232,11 @@ fun FeedScreen(
                             onShareVideo(video)
                             showShareSheet = true
                         },
-                        onHashtagClick = onHashtagClick
+                        onHashtagClick = onHashtagClick,
+                        onOpenAlgoInsights = {
+                            activeVideoForAlgo = video
+                            showAlgoSheet = true
+                        }
                     )
                 }
             }
@@ -282,7 +307,7 @@ fun FeedScreen(
                     }
                 }
 
-                // For You Tab
+                // For You Tab (Smart Recommendation Feed)
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.clickable { selectedFeedType = FeedType.FOR_YOU }
@@ -323,6 +348,23 @@ fun FeedScreen(
                     modifier = Modifier.size(22.dp)
                 )
             }
+        }
+
+        // Algo Insights Bottom Sheet
+        if (showAlgoSheet && activeVideoForAlgo != null) {
+            val video = activeVideoForAlgo!!
+            val insight = onGetAlgoInsight(video)
+            AlgoInsightsBottomSheet(
+                video = video,
+                insight = insight,
+                sheetState = algoSheetState,
+                onDismiss = {
+                    coroutineScope.launch {
+                        algoSheetState.hide()
+                        showAlgoSheet = false
+                    }
+                }
+            )
         }
 
         // Comments Bottom Sheet

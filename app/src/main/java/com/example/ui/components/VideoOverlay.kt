@@ -30,8 +30,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
@@ -62,7 +64,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -84,6 +85,7 @@ fun VideoOverlay(
     onToggleSave: () -> Unit,
     onOpenShare: () -> Unit,
     onHashtagClick: (String) -> Unit,
+    onOpenAlgoInsights: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "disc_rotate")
@@ -118,13 +120,42 @@ fun VideoOverlay(
             )
             .padding(horizontal = 12.dp, vertical = 16.dp)
     ) {
-        // Top right mute toggle
+        // Top right buttons
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 40.dp, end = 4.dp),
-            horizontalArrangement = Arrangement.End
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            // Algo pill
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color.Black.copy(alpha = 0.45f))
+                    .clickable { onOpenAlgoInsights() }
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Bolt,
+                        contentDescription = "Algorithm",
+                        tint = TokTokCyan,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Algo Insights",
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Mute button
             Box(
                 modifier = Modifier
                     .clip(CircleShape)
@@ -147,12 +178,12 @@ fun VideoOverlay(
                 .align(Alignment.BottomEnd)
                 .padding(bottom = 70.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             // Creator Avatar with Follow Badge
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = Modifier.padding(bottom = 8.dp)
+                modifier = Modifier.padding(bottom = 6.dp)
             ) {
                 AsyncImage(
                     model = video.userAvatarUrl,
@@ -219,10 +250,18 @@ fun VideoOverlay(
                 onClick = onOpenShare
             )
 
+            // Algo Telemetry Button
+            OverlayActionButton(
+                icon = Icons.Default.Bolt,
+                count = "Algo",
+                tint = TokTokCyan,
+                onClick = onOpenAlgoInsights
+            )
+
             // Rotating Music Vinyl Disc
             Box(
                 modifier = Modifier
-                    .size(46.dp)
+                    .size(44.dp)
                     .clip(CircleShape)
                     .background(Color(0xFF1E1F2A))
                     .border(1.5.dp, Color.White.copy(alpha = 0.4f), CircleShape)
@@ -319,12 +358,17 @@ fun VideoOverlay(
                 text = captionText,
                 fontSize = 13.5.sp,
                 lineHeight = 18.sp,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(bottom = 8.dp)
+                color = Color.White,
+                modifier = Modifier
+                    .padding(bottom = 8.dp)
+                    .clickable {
+                        // Extract first hashtag if present
+                        val firstTag = video.hashtags.firstOrNull()
+                        if (firstTag != null) onHashtagClick(firstTag)
+                    }
             )
 
-            // Audio track ticker with musical note
+            // Music track metadata
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
@@ -343,8 +387,7 @@ fun VideoOverlay(
                     text = "${video.musicTitle} • ${video.musicAuthor}",
                     color = Color.White.copy(alpha = 0.9f),
                     fontSize = 12.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    maxLines = 1
                 )
             }
         }
@@ -352,22 +395,24 @@ fun VideoOverlay(
 }
 
 @Composable
-private fun OverlayActionButton(
+fun OverlayActionButton(
     icon: ImageVector,
     count: String,
     tint: Color,
     onClick: () -> Unit,
-    iconScale: Float = 1.0f
+    iconScale: Float = 1f
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.clickable { onClick() }
+        modifier = Modifier
+            .clickable { onClick() }
+            .padding(2.dp)
     ) {
         Box(
             modifier = Modifier
-                .size(42.dp)
+                .size(40.dp)
                 .clip(CircleShape)
-                .background(Color.Black.copy(alpha = 0.25f)),
+                .background(Color.Black.copy(alpha = 0.3f)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -375,7 +420,7 @@ private fun OverlayActionButton(
                 contentDescription = null,
                 tint = tint,
                 modifier = Modifier
-                    .size(28.dp)
+                    .size(24.dp)
                     .scale(iconScale)
             )
         }
@@ -385,7 +430,7 @@ private fun OverlayActionButton(
             color = Color.White,
             fontSize = 11.5.sp,
             fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.shadow(4.dp)
+            modifier = Modifier.shadow(2.dp, shape = CircleShape)
         )
     }
 }
@@ -393,7 +438,6 @@ private fun OverlayActionButton(
 fun formatCount(count: Int): String {
     return when {
         count >= 1_000_000 -> String.format("%.1fM", count / 1_000_000.0)
-        count >= 10_000 -> String.format("%.1fK", count / 1_000.0)
         count >= 1_000 -> String.format("%.1fK", count / 1_000.0)
         else -> count.toString()
     }

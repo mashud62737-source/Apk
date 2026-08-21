@@ -22,13 +22,21 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.AutoGraph
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.Card
@@ -37,6 +45,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -59,6 +68,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.algorithm.ColdStartTier
+import com.example.algorithm.RecommendationEngine
 import com.example.model.User
 import com.example.model.Video
 import com.example.ui.components.formatCount
@@ -76,7 +87,7 @@ fun AdminScreen(
 ) {
     val context = LocalContext.current
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Dashboard", "Videos (${videos.size})", "Creators (${users.size})")
+    val tabs = listOf("Dashboard", "Videos (${videos.size})", "Creators", "Feed Engine")
 
     val totalViews = videos.sumOf { it.viewsCount.toLong() }
     val totalLikes = videos.sumOf { it.likesCount.toLong() }
@@ -111,7 +122,7 @@ fun AdminScreen(
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
-                    text = "Platform moderation & analytics management",
+                    text = "Recommendation Engine & Pipeline telemetry",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -139,7 +150,7 @@ fun AdminScreen(
                         Text(
                             text = title,
                             fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Medium,
-                            fontSize = 13.5.sp
+                            fontSize = 12.5.sp
                         )
                     }
                 )
@@ -150,6 +161,207 @@ fun AdminScreen(
             0 -> AdminDashboardTab(totalViews, totalLikes, totalComments, users.size, videos.size)
             1 -> AdminVideosTab(videos, onDeleteVideo, onTogglePin)
             2 -> AdminUsersTab(users)
+            3 -> AdminFeedEngineTab()
+        }
+    }
+}
+
+@Composable
+private fun AdminFeedEngineTab() {
+    val affinities = RecommendationEngine.getUserAffinity("user_me")
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Section: Algorithmic Architecture
+        item {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(imageVector = Icons.Default.Bolt, contentDescription = null, tint = TokTokPink)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Smart Recommendation Engine (Live)",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Score = (InterestMatch × 35%) + (CompletionRate × 25%) + (EngagementRatio × 20%) + ColdStartBonus + OfficialBoost",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = TokTokCyan
+                    )
+                }
+            }
+        }
+
+        // Section: User Profiling Affinity Vectors
+        item {
+            Text(
+                text = "Real-Time User Interest Affinity Profile",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        items(affinities.entries.toList()) { (category, score) ->
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(text = "#$category", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text(text = "${score.toInt()}%", fontWeight = FontWeight.Bold, color = TokTokPink, fontSize = 13.sp)
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    LinearProgressIndicator(
+                        progress = { score / 100f },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                            .clip(CircleShape),
+                        color = TokTokPink,
+                        trackColor = MaterialTheme.colorScheme.surface
+                    )
+                }
+            }
+        }
+
+        // Section: Cold Start Distribution Pools
+        item {
+            Text(
+                text = "Viral Cold-Start Exploration Pools",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        item {
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(imageVector = Icons.Default.Hub, contentDescription = null, tint = TokTokCyan, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(text = "Tier 1: Initial Test Pool (100 Active Users)", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                    Text(
+                        text = "Every uploaded video is seeded into a random active 100-user sample with a 1.4x test multiplier.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(imageVector = Icons.Default.AutoGraph, contentDescription = null, tint = Color(0xFF4CAF50), modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(text = "Tier 2: Expanded Community Pool (5,000 Users)", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                    Text(
+                        text = "Triggered when test completion rate >= 60% and engagement velocity >= 5%.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(imageVector = Icons.Default.LocalFireDepartment, contentDescription = null, tint = TokTokPink, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(text = "Tier 3: Viral Global FYP Distribution", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                    Text(
+                        text = "Promoted platform-wide to all matching user interest vectors.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        // Section: Official & Verified System Boost
+        item {
+            Text(
+                text = "Official & Verified Creator Distribution",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        item {
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = TokTokCyan.copy(alpha = 0.1f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(imageVector = Icons.Default.Shield, contentDescription = null, tint = TokTokCyan)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(text = "Platform System Boost Active", fontWeight = FontWeight.Bold, color = TokTokCyan, fontSize = 13.sp)
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "• Admin/Official Announcement Posts: +50% Base Weight & Slot Priority\n• Verified Creator Posts: +25% Quality Multiplier\n• Pinned Highlights: +30% Profile Promotion",
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+        }
+
+        // Section: Storage & Transcoding Architecture
+        item {
+            Text(
+                text = "Transcoding & CDN Storage Architecture",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        item {
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(imageVector = Icons.Default.CloudDone, contentDescription = null, tint = Color(0xFF4CAF50), modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(text = "AWS S3 Multi-Bitrate Storage Bucket", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                    Text(
+                        text = "• Storage URI: s3://toktok-media-vault/videos/2026/08/\n• Transcoding: 1080p (6.2Mbps), 720p (3.1Mbps), 480p (1.2Mbps) HLS ladder\n• Edge CDN: CloudFront PoPs (Low-Latency HTTP/3)",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
     }
 }
@@ -204,16 +416,16 @@ private fun AdminDashboardTab(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 AdminMetricCard(
-                    title = "Active Creators",
-                    value = totalUsers.toString(),
-                    icon = Icons.Default.Group,
-                    tint = Color(0xFF7C4DFF),
+                    title = "Total Comments",
+                    value = formatCount(totalComments.toInt()),
+                    icon = Icons.Default.BarChart,
+                    tint = Color(0xFF4CAF50),
                     modifier = Modifier.weight(1f)
                 )
                 AdminMetricCard(
-                    title = "Published Videos",
-                    value = totalVideos.toString(),
-                    icon = Icons.Default.Movie,
+                    title = "Active Creators",
+                    value = totalUsers.toString(),
+                    icon = Icons.Default.Group,
                     tint = Color(0xFFFF9800),
                     modifier = Modifier.weight(1f)
                 )
@@ -222,29 +434,22 @@ private fun AdminDashboardTab(
 
         item {
             Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ),
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.BarChart,
-                            contentDescription = null,
-                            tint = TokTokPink,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Platform Health & Infrastructure",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = "• Firebase Authentication: Operational\n• Video Streaming Engine: 100% Uptime\n• Room SQLite Local Cache: Synchronized\n• Firebase Storage Emulation: Connected",
+                        text = "Platform Health Status",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "• Feed Latency: 12ms (Optimal)\n• Video Buffer Ratio: 0.02%\n• Cold-Start Pool Active Tests: 14\n• Auto-Classification Accuracy: 96.4%",
                         fontSize = 13.sp,
                         lineHeight = 20.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -264,25 +469,30 @@ private fun AdminMetricCard(
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
+        modifier = modifier
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(text = title, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Icon(imageVector = icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
-            }
+            Icon(
+                imageVector = icon,
+                contentDescription = title,
+                tint = tint,
+                modifier = Modifier.size(24.dp)
+            )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = value,
                 fontSize = 22.sp,
-                fontWeight = FontWeight.Black,
+                fontWeight = FontWeight.ExtraBold,
                 color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = title,
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -298,71 +508,82 @@ private fun AdminVideosTab(
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        items(videos, key = { it.id }) { video ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-                    .padding(10.dp),
-                verticalAlignment = Alignment.CenterVertically
+        items(videos) { video ->
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                ),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                AsyncImage(
-                    model = video.thumbnailUrl,
-                    contentDescription = video.caption,
-                    contentScale = ContentScale.Crop,
+                Row(
                     modifier = Modifier
-                        .size(width = 44.dp, height = 60.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = video.caption,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                        maxLines = 1,
-                        color = MaterialTheme.colorScheme.onSurface
+                        .fillMaxWidth()
+                        .padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    AsyncImage(
+                        model = video.thumbnailUrl,
+                        contentDescription = video.caption,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(width = 54.dp, height = 72.dp)
+                            .clip(RoundedCornerShape(8.dp))
                     )
-                    Text(
-                        text = "@${video.userHandle} • ${formatCount(video.viewsCount)} views • ${formatCount(video.likesCount)} likes",
-                        fontSize = 11.5.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    if (video.isReported) {
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "⚠️ Flagged by Community",
-                            fontSize = 11.sp,
+                            text = "@${video.userHandle}",
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFFE53935)
+                            fontSize = 13.sp,
+                            color = TokTokCyan
+                        )
+                        Text(
+                            text = video.caption,
+                            fontSize = 12.sp,
+                            maxLines = 2,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "${formatCount(video.viewsCount)} views • ${formatCount(video.likesCount)} likes",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                }
 
-                // Pin toggle
-                IconButton(onClick = {
-                    onTogglePin(video.id, !video.isPinned)
-                    Toast.makeText(context, if (!video.isPinned) "Video pinned!" else "Video unpinned!", Toast.LENGTH_SHORT).show()
-                }) {
-                    Icon(
-                        imageVector = if (video.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
-                        contentDescription = "Pin video",
-                        tint = if (video.isPinned) TokTokPink else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                // Delete
-                IconButton(onClick = {
-                    onDeleteVideo(video.id)
-                    Toast.makeText(context, "Video removed from platform", Toast.LENGTH_SHORT).show()
-                }) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Delete video",
-                        tint = Color(0xFFE53935)
-                    )
+                    Row {
+                        IconButton(
+                            onClick = {
+                                onTogglePin(video.id, !video.isPinned)
+                                Toast.makeText(
+                                    context,
+                                    if (!video.isPinned) "Pinned video to top!" else "Unpinned video",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        ) {
+                            Icon(
+                                imageVector = if (video.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                                contentDescription = "Pin",
+                                tint = if (video.isPinned) TokTokPink else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                onDeleteVideo(video.id)
+                                Toast.makeText(context, "Video removed from feed", Toast.LENGTH_SHORT).show()
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Delete",
+                                tint = Color.Red.copy(alpha = 0.8f)
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -374,9 +595,9 @@ private fun AdminUsersTab(users: List<User>) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        items(users, key = { it.id }) { user ->
+        items(users) { user ->
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

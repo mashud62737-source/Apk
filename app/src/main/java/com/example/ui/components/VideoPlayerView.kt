@@ -36,9 +36,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
@@ -57,22 +61,39 @@ fun VideoPlayerView(
 ) {
     val context = LocalContext.current
     var isBuffering by remember { mutableStateOf(true) }
+    var hasError by remember { mutableStateOf(false) }
     var isUserPaused by remember { mutableStateOf(false) }
 
     val exoPlayer = remember(video.videoUrl) {
-        ExoPlayer.Builder(context).build().apply {
-            val mediaItem = MediaItem.fromUri(video.videoUrl)
-            setMediaItem(mediaItem)
-            repeatMode = Player.REPEAT_MODE_ALL
-            volume = if (isMuted) 0f else 1f
-            prepare()
-        }
+        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+            .setUserAgent("Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36 TokTokApp/1.0")
+            .setAllowCrossProtocolRedirects(true)
+            .setConnectTimeoutMs(15000)
+            .setReadTimeoutMs(15000)
+
+        val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
+        val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
+
+        ExoPlayer.Builder(context)
+            .setMediaSourceFactory(mediaSourceFactory)
+            .build().apply {
+                val mediaItem = MediaItem.fromUri(video.videoUrl)
+                setMediaItem(mediaItem)
+                repeatMode = Player.REPEAT_MODE_ALL
+                volume = if (isMuted) 0f else 1f
+                prepare()
+            }
     }
 
     DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 isBuffering = playbackState == Player.STATE_BUFFERING
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                isBuffering = false
+                hasError = true
             }
         }
         exoPlayer.addListener(listener)
@@ -82,8 +103,8 @@ fun VideoPlayerView(
         }
     }
 
-    LaunchedEffect(isPlaying, isUserPaused) {
-        if (isPlaying && !isUserPaused) {
+    LaunchedEffect(isPlaying, isUserPaused, hasError) {
+        if (isPlaying && !isUserPaused && !hasError) {
             exoPlayer.play()
         } else {
             exoPlayer.pause()
@@ -119,23 +140,25 @@ fun VideoPlayerView(
         )
 
         // ExoPlayer view
-        AndroidView(
-            factory = { ctx ->
-                PlayerView(ctx).apply {
-                    player = exoPlayer
-                    useController = false
-                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                    layoutParams = FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT
-                    )
-                }
-            },
-            modifier = Modifier.fillMaxSize()
-        )
+        if (!hasError) {
+            AndroidView(
+                factory = { ctx ->
+                    PlayerView(ctx).apply {
+                        player = exoPlayer
+                        useController = false
+                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                        layoutParams = FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT
+                        )
+                    }
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
 
         // Buffering spinner indicator
-        if (isBuffering && isPlaying && !isUserPaused) {
+        if (isBuffering && isPlaying && !isUserPaused && !hasError) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center

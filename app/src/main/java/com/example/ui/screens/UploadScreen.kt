@@ -30,14 +30,21 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.Hub
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -74,6 +81,10 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.data.SampleData
 import com.example.model.SoundItem
+import com.example.pipeline.MediaType
+import com.example.pipeline.MediaUploadPipeline
+import com.example.pipeline.PipelineProgressState
+import com.example.pipeline.UploadPipelineStage
 import com.example.ui.theme.TokTokCyan
 import com.example.ui.theme.TokTokPink
 import kotlinx.coroutines.delay
@@ -90,6 +101,7 @@ fun UploadScreen(
     val coroutineScope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
 
+    var selectedMediaType by remember { mutableStateOf(MediaType.VIDEO) }
     var selectedVideoUri by remember { mutableStateOf<Uri?>(null) }
     var selectedVideoUrl by remember {
         mutableStateOf("https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4")
@@ -102,7 +114,7 @@ fun UploadScreen(
     var selectedPrivacy by remember { mutableStateOf("Public") }
 
     var isUploading by remember { mutableStateOf(false) }
-    var uploadProgress by remember { mutableFloatStateOf(0f) }
+    var pipelineState by remember { mutableStateOf<PipelineProgressState?>(null) }
 
     val soundSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showSoundSheet by remember { mutableStateOf(false) }
@@ -113,19 +125,19 @@ fun UploadScreen(
         if (uri != null) {
             selectedVideoUri = uri
             selectedThumbnailUrl = "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&auto=format&fit=crop&q=80"
-            Toast.makeText(context, "Video selected from gallery!", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Media selected from gallery!", Toast.LENGTH_SHORT).show()
         }
     }
 
     val sampleTemplates = listOf(
-        Pair("Cinematic Sunset", "https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800&auto=format&fit=crop&q=80"),
-        Pair("Cyberpunk City", "https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=800&auto=format&fit=crop&q=80"),
-        Pair("Gourmet Food", "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&auto=format&fit=crop&q=80"),
-        Pair("Tech & AI", "https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&auto=format&fit=crop&q=80"),
-        Pair("Lofi Coding", "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=800&auto=format&fit=crop&q=80")
+        Pair("Cinematic Tech", "https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&auto=format&fit=crop&q=80"),
+        Pair("Tokyo Cityscape", "https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=800&auto=format&fit=crop&q=80"),
+        Pair("Synthwave Studio", "https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?w=800&auto=format&fit=crop&q=80"),
+        Pair("Gourmet Cooking", "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&auto=format&fit=crop&q=80"),
+        Pair("Lofi Coding Room", "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=800&auto=format&fit=crop&q=80")
     )
 
-    val quickHashtags = listOf("fyp", "viral", "trending", "dance", "comedy", "techtok", "foodie", "coding", "aesthetic")
+    val quickHashtags = listOf("fyp", "viral", "techtok", "coding", "travel", "foodie", "synthwave", "dance", "lifestyle")
 
     Column(
         modifier = Modifier
@@ -143,7 +155,7 @@ fun UploadScreen(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = "New Video Post",
+                text = "Creator Studio Upload",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground
@@ -166,7 +178,7 @@ fun UploadScreen(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = selectedSound.title.take(16) + if (selectedSound.title.length > 16) "..." else "",
+                    text = selectedSound.title.take(14) + if (selectedSound.title.length > 14) "..." else "",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -183,7 +195,50 @@ fun UploadScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Video Source Selector & Preview
+            // Post Format Switcher (Video, Photo, Text)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    .padding(4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                listOf(
+                    Triple(MediaType.VIDEO, "Video Post", Icons.Default.Movie),
+                    Triple(MediaType.PHOTO, "Photo Post", Icons.Default.Image),
+                    Triple(MediaType.TEXT, "Text Story", Icons.Default.TextFields)
+                ).forEach { (type, label, icon) ->
+                    val isSelected = selectedMediaType == type
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isSelected) TokTokPink else Color.Transparent)
+                            .clickable { selectedMediaType = type }
+                            .padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = label,
+                                tint = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = label,
+                                color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                fontSize = 12.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Media Source Selector & Preview
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -198,7 +253,7 @@ fun UploadScreen(
                 ) {
                     AsyncImage(
                         model = selectedThumbnailUrl,
-                        contentDescription = "Selected video preview",
+                        contentDescription = "Selected media preview",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )
@@ -210,7 +265,7 @@ fun UploadScreen(
                             .padding(4.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("Preview", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Text("HD 1080p", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
                 }
 
@@ -236,7 +291,7 @@ fun UploadScreen(
                         Text("Select from Gallery", color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp)
                     }
 
-                    // Camera Recording Simulator
+                    // Camera Recording
                     Button(
                         onClick = {
                             selectedThumbnailUrl = "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=800&auto=format&fit=crop&q=80"
@@ -253,192 +308,214 @@ fun UploadScreen(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Record Clip (Camera)", color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp)
+                        Text("Record via Camera", color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp)
                     }
 
-                    Text(
-                        text = "Or choose sample visual:",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(sampleTemplates) { template ->
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
-                                    .clickable {
-                                        selectedThumbnailUrl = template.second
-                                    }
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                            ) {
-                                Text(template.first, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface)
-                            }
-                        }
+                    // Direct Transcoding Preset
+                    Button(
+                        onClick = {
+                            selectedThumbnailUrl = "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=800&auto=format&fit=crop&q=80"
+                            caption = "Building a next-gen feed engine with HLS transcoding! 🚀⚡️ #techtok #coding #ai"
+                            Toast.makeText(context, "Template loaded!", Toast.LENGTH_SHORT).show()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            tint = Color(0xFFFF9800),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Use Trending Template", color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp)
                     }
                 }
             }
 
             // Caption Text Field
+            OutlinedTextField(
+                value = caption,
+                onValueChange = { caption = it },
+                label = { Text("Describe your video...") },
+                placeholder = { Text("Add captions, tags and mentions #techtok #fyp @friends") },
+                minLines = 3,
+                maxLines = 5,
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = TokTokPink,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            // Quick Hashtag Chips
             Column {
                 Text(
-                    text = "Caption & Hashtags",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
+                    text = "Recommended Hashtags",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                 )
-                Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = caption,
-                    onValueChange = { caption = it },
-                    placeholder = {
-                        Text(
-                            text = "Describe your video, tag @friends, add #hashtags...",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 14.sp
-                        )
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(110.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                        focusedBorderColor = TokTokPink,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                    )
-                )
-
                 Spacer(modifier = Modifier.height(8.dp))
-
-                // Quick Hashtag Chips
-                Text(
-                    text = "Suggested Hashtags:",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(end = 8.dp)
+                ) {
                     items(quickHashtags) { tag ->
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(14.dp))
+                                .clip(RoundedCornerShape(16.dp))
                                 .background(MaterialTheme.colorScheme.surfaceVariant)
                                 .clickable {
-                                    if (!caption.contains("#$tag")) {
-                                        caption = if (caption.isBlank()) "#$tag" else "$caption #$tag"
-                                    }
+                                    caption = if (caption.isBlank()) "#$tag " else "$caption #$tag "
                                 }
-                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
                         ) {
-                            Text("#$tag", fontSize = 12.sp, color = TokTokPink, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = "#$tag",
+                                color = TokTokPink,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
                 }
             }
 
-            // Privacy Selection
+            // Presets gallery
             Column {
                 Text(
-                    text = "Who can view this video",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
+                    text = "Select Video Concept",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
+                LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    val privacies = listOf(
-                        Triple("Public", Icons.Default.Public, "Everyone"),
-                        Triple("Friends", Icons.Default.Videocam, "Followers"),
-                        Triple("Private", Icons.Default.Lock, "Only me")
-                    )
-
-                    privacies.forEach { (name, icon, desc) ->
-                        val isSelected = selectedPrivacy == name
-                        Card(
+                    items(sampleTemplates) { (title, url) ->
+                        val isSelected = selectedThumbnailUrl == url
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier
-                                .weight(1f)
-                                .clickable { selectedPrivacy = name },
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (isSelected) TokTokPink.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                            ),
-                            border = if (isSelected) androidx.compose.foundation.BorderStroke(1.5.dp, TokTokPink) else null,
-                            shape = RoundedCornerShape(12.dp)
+                                .width(90.dp)
+                                .clickable {
+                                    selectedThumbnailUrl = url
+                                    caption = "Sharing my $title journey! ✨ #viral #fyp"
+                                }
                         ) {
-                            Column(
-                                modifier = Modifier.padding(10.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Icon(
-                                    imageVector = icon,
-                                    contentDescription = name,
-                                    tint = if (isSelected) TokTokPink else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(22.dp)
+                            AsyncImage(
+                                model = url,
+                                contentDescription = title,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .size(90.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .border(
+                                        width = if (isSelected) 2.dp else 0.dp,
+                                        color = if (isSelected) TokTokPink else Color.Transparent,
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = title,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                color = if (isSelected) TokTokPink else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Real-Time Asynchronous Transcoding & Ingestion Pipeline Visualizer
+            if (isUploading && pipelineState != null) {
+                val state = pipelineState!!
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(
+                                    color = TokTokPink,
+                                    strokeWidth = 2.5.dp,
+                                    modifier = Modifier.size(18.dp)
                                 )
-                                Spacer(modifier = Modifier.height(4.dp))
+                                Spacer(modifier = Modifier.width(10.dp))
                                 Text(
-                                    text = name,
-                                    fontSize = 12.sp,
+                                    text = state.stage.title,
+                                    style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (isSelected) TokTokPink else MaterialTheme.colorScheme.onSurface
+                                    color = TokTokCyan
                                 )
+                            }
+                            Text(
+                                text = "${(state.progress * 100).toInt()}%",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = TokTokPink
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LinearProgressIndicator(
+                            progress = { state.progress },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(CircleShape),
+                            color = TokTokPink,
+                            trackColor = MaterialTheme.colorScheme.surface
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = state.currentDetail,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                        )
+
+                        if (state.variants.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Transcoding Multi-Bitrate HLS Ladder:",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            state.variants.forEach { variant ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = "• ${variant.quality} (${variant.resolution})",
+                                        fontSize = 11.sp,
+                                        color = TokTokCyan
+                                    )
+                                    Text(
+                                        text = variant.bitrate,
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                    )
+                                }
                             }
                         }
                     }
-                }
-            }
-
-            // Upload Progress Animation
-            AnimatedVisibility(visible = isUploading) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .padding(16.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.CloudUpload,
-                                contentDescription = null,
-                                tint = TokTokCyan,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Uploading to Cloud Storage...",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                        Text(
-                            text = "${(uploadProgress * 100).toInt()}%",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = TokTokCyan
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(10.dp))
-                    LinearProgressIndicator(
-                        progress = { uploadProgress },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(6.dp)
-                            .clip(CircleShape),
-                        color = TokTokPink,
-                        trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
-                    )
                 }
             }
 
@@ -446,30 +523,31 @@ fun UploadScreen(
             Button(
                 onClick = {
                     if (caption.isBlank()) {
-                        caption = "Check out my new video! 🔥✨ #fyp #viral"
+                        caption = "Check out my new creation! 🔥✨ #fyp #viral #techtok"
                     }
                     isUploading = true
                     coroutineScope.launch {
-                        // Simulate Firebase Storage chunk upload
-                        for (i in 1..10) {
-                            delay(120)
-                            uploadProgress = i / 10f
+                        val result = MediaUploadPipeline.processAndUploadMedia(
+                            mediaType = selectedMediaType,
+                            rawUri = selectedVideoUrl,
+                            caption = caption,
+                            hashtags = caption.split(" ").filter { it.startsWith("#") }.map { it.removePrefix("#") }
+                        ) { progress ->
+                            pipelineState = progress
                         }
-                        val extractedHashtags = caption.split(" ")
-                            .filter { it.startsWith("#") }
-                            .map { it.removePrefix("#") }
 
                         onUploadVideo(
-                            selectedVideoUrl,
+                            result.masterStreamUrl,
                             selectedThumbnailUrl,
                             caption,
-                            if (extractedHashtags.isNotEmpty()) extractedHashtags else listOf("fyp", "trending"),
+                            result.detectedTags,
                             selectedSound.title,
                             selectedSound.author
                         )
-                        delay(200)
+
+                        delay(400)
                         isUploading = false
-                        Toast.makeText(context, "🎉 Video posted successfully to feed!", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "🎉 Live in Test Pool ${result.coldStartPoolId}!", Toast.LENGTH_LONG).show()
                         onPublishSuccess()
                     }
                 },
@@ -487,7 +565,7 @@ fun UploadScreen(
                         Icon(imageVector = Icons.Default.CloudUpload, contentDescription = null, tint = Color.White)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Post Video to TokTok",
+                            text = "Process & Distribute Post",
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp,
                             color = Color.White

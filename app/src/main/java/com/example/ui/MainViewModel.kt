@@ -3,6 +3,9 @@ package com.example.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.algorithm.AlgoRecommendationInsight
+import com.example.algorithm.PlaybackTelemetry
+import com.example.algorithm.RecommendationEngine
 import com.example.data.AppRepository
 import com.example.model.Comment
 import com.example.model.HashtagItem
@@ -10,11 +13,15 @@ import com.example.model.NotificationItem
 import com.example.model.SoundItem
 import com.example.model.User
 import com.example.model.Video
+import com.example.pipeline.MediaType
+import com.example.pipeline.MediaUploadPipeline
+import com.example.pipeline.PipelineProgressState
 import com.example.ui.components.ScreenTab
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -36,6 +43,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _initialSearchQuery = MutableStateFlow("")
     val initialSearchQuery: StateFlow<String> = _initialSearchQuery.asStateFlow()
+
+    private val _uploadProgress = MutableStateFlow<PipelineProgressState?>(null)
+    val uploadProgress: StateFlow<PipelineProgressState?> = _uploadProgress.asStateFlow()
+
+    // Active algorithmic insight for sheet
+    private val _selectedInsightVideo = MutableStateFlow<Video?>(null)
+    val selectedInsightVideo: StateFlow<Video?> = _selectedInsightVideo.asStateFlow()
 
     val currentUser: StateFlow<User?> = repository.currentUser
     val allVideos: StateFlow<List<Video>> = repository.allVideos
@@ -63,6 +77,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val trendingHashtags: List<HashtagItem> = repository.getTrendingHashtags()
     val popularSounds: List<SoundItem> = repository.getPopularSounds()
 
+    /**
+     * Algorithmic Smart Recommendation Feed (For You)
+     * Dynamically ranks videos using multi-factor user affinity, cold start boost, and verified weights.
+     */
+    val forYouFeed: StateFlow<List<Video>> = combine(
+        repository.allVideos,
+        repository.currentUser,
+        repository.allUsers
+    ) { videos, user, users ->
+        val userId = user?.id ?: "user_me"
+        val usersMap = users.associateBy { it.id }
+        RecommendationEngine.rankForYouFeed(userId, videos, usersMap)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     fun selectTab(tab: ScreenTab) {
         if (tab != ScreenTab.PROFILE) {
             _inspectedUserId.value = null
@@ -88,15 +116,60 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _currentTab.value = ScreenTab.SEARCH
     }
 
+    fun showAlgoInsight(video: Video?) {
+        _selectedInsightVideo.value = video
+    }
+
+    fun getAlgoInsight(video: Video): AlgoRecommendationInsight {
+        val user = currentUser.value
+        val userId = user?.id ?: "user_me"
+        val creator = allUsers.value.find { it.id == video.userId }
+        return RecommendationEngine.evaluateVideo(userId, video, creator)
+    }
+
+    fun recordPlaybackInteraction(video: Video, telemetry: PlaybackTelemetry) {
+        val userId = currentUser.value?.id ?: "user_me"
+        RecommendationEngine.recordInteraction(userId, video, telemetry)
+    }
+
+    fun getUserAffinities(): Map<String, Float> {
+        val userId = currentUser.value?.id ?: "user_me"
+        return RecommendationEngine.getUserAffinity(userId)
+    }
+
     fun toggleLike(video: Video) {
         viewModelScope.launch {
             repository.toggleVideoLike(video)
+            val userId = currentUser.value?.id ?: "user_me"
+            RecommendationEngine.recordInteraction(
+                userId,
+                video,
+                PlaybackTelemetry(
+                    videoId = video.id,
+                    watchTimeMs = 8000,
+                    durationMs = 15000,
+                    isCompleted = true,
+                    isLiked = !video.isLikedByMe
+                )
+            )
         }
     }
 
     fun toggleSave(video: Video) {
         viewModelScope.launch {
             repository.toggleVideoSave(video)
+            val userId = currentUser.value?.id ?: "user_me"
+            RecommendationEngine.recordInteraction(
+                userId,
+                video,
+                PlaybackTelemetry(
+                    videoId = video.id,
+                    watchTimeMs = 10000,
+                    durationMs = 15000,
+                    isCompleted = true,
+                    isSaved = !video.isSavedByMe
+                )
+            )
         }
     }
 
@@ -109,6 +182,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun sendComment(videoId: String, text: String) {
         viewModelScope.launch {
             repository.addComment(videoId, text)
+            val video = allVideos.value.find { it.id == videoId }
+            if (video != null) {
+                val userId = currentUser.value?.id ?: "user_me"
+                RecommendationEngine.recordInteraction(
+                    userId,
+                    video,
+                    PlaybackTelemetry(
+                        videoId = videoId,
+                        watchTimeMs = 12000,
+                        durationMs = 15000,
+                        isCompleted = true,
+                        isCommented = true
+                    )
+                )
+            }
         }
     }
 
@@ -121,6 +209,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun shareVideo(video: Video) {
         viewModelScope.launch {
             repository.shareVideo(video.id)
+            val userId = currentUser.value?.id ?: "user_me"
+            RecommendationEngine.recordInteraction(
+                userId,
+                video,
+                PlaybackTelemetry(
+                    videoId = video.id,
+                    watchTimeMs = 15000,
+                    durationMs = 15000,
+                    isCompleted = true,
+                    isShared = true
+                )
+            )
         }
     }
 
@@ -133,6 +233,43 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun incrementViews(videoId: String) {
         viewModelScope.launch {
             repository.incrementViewCount(videoId)
+        }
+    }
+
+    /**
+     * Executes the comprehensive multi-bitrate transcoding, object storage, and distribution pipeline.
+     */
+    fun processAndPublishMedia(
+        mediaType: MediaType,
+        rawUri: String,
+        caption: String,
+        hashtags: List<String>,
+        musicTitle: String,
+        musicAuthor: String,
+        onComplete: () -> Unit
+    ) {
+        viewModelScope.launch {
+            val resultPackage = MediaUploadPipeline.processAndUploadMedia(
+                mediaType = mediaType,
+                rawUri = rawUri,
+                caption = caption,
+                hashtags = hashtags
+            ) { progressState ->
+                _uploadProgress.value = progressState
+            }
+
+            // Save to database
+            repository.uploadVideo(
+                videoUrl = resultPackage.masterStreamUrl,
+                thumbnailUrl = resultPackage.thumbnailUrl,
+                caption = caption,
+                hashtags = resultPackage.detectedTags,
+                musicTitle = musicTitle,
+                musicAuthor = musicAuthor
+            )
+
+            _uploadProgress.value = null
+            onComplete()
         }
     }
 

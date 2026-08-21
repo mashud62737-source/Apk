@@ -60,6 +60,7 @@ fun TokTokApp(
 
     val currentUser by viewModel.currentUser.collectAsState()
     val inspectedUserId by viewModel.inspectedUserId.collectAsState()
+    val forYouVideos by viewModel.forYouFeed.collectAsState()
     val allVideos by viewModel.allVideos.collectAsState()
     val followingVideos by viewModel.followingVideos.collectAsState()
     val likedVideos by viewModel.likedVideos.collectAsState()
@@ -103,9 +104,9 @@ fun TokTokApp(
             when (currentTab) {
                 ScreenTab.FEED -> {
                     FeedScreen(
-                        forYouVideos = allVideos,
+                        forYouVideos = forYouVideos,
                         followingVideos = followingVideos,
-                        currentComments = emptyList(), // Dynamically queried via repository
+                        currentComments = emptyList(),
                         currentUser = currentUser,
                         isMuted = isMuted,
                         onToggleMute = { viewModel.toggleMute() },
@@ -119,7 +120,9 @@ fun TokTokApp(
                         onIncrementViews = { videoId -> viewModel.incrementViews(videoId) },
                         onCreatorClick = { userId -> viewModel.viewUserProfile(userId) },
                         onSearchClick = { viewModel.selectTab(ScreenTab.SEARCH) },
-                        onHashtagClick = { tag -> viewModel.searchHashtag(tag) }
+                        onHashtagClick = { tag -> viewModel.searchHashtag(tag) },
+                        onGetAlgoInsight = { video -> viewModel.getAlgoInsight(video) },
+                        onRecordTelemetry = { video, telemetry -> viewModel.recordPlaybackInteraction(video, telemetry) }
                     )
                 }
 
