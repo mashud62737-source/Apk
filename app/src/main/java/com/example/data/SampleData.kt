@@ -51,4 +51,19 @@ object SampleData {
         SoundItem("s_4", "Funky Cooking Groove", "Marcus Beats", 30, "4.2K videos", "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=200&auto=format&fit=crop&q=80"),
         SoundItem("s_5", "Summer EDM Drop", "TokTok Viral", 35, "3.8K videos", "https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=200&auto=format&fit=crop&q=80")
     )
+
+    val videoCategories = listOf(
+        com.example.model.VideoCategory("cat_trending", "Trending / FYP", "🔥", "Top viral moments & trending sounds"),
+        com.example.model.VideoCategory("cat_comedy", "Comedy & Fun", "😂", "Memes, skits, pranks and funny moments"),
+        com.example.model.VideoCategory("cat_tech", "Tech & Coding", "💡", "Gadgets, apps, AI development & tech reviews"),
+        com.example.model.VideoCategory("cat_gaming", "Gaming & Esports", "🎮", "Gameplay, highlights, streams & tips"),
+        com.example.model.VideoCategory("cat_music", "Music & Dance", "🎵", "Original songs, choreography & covers"),
+        com.example.model.VideoCategory("cat_food", "Food & Cooking", "🍕", "Delicious recipes, restaurant vlogs & snacks"),
+        com.example.model.VideoCategory("cat_beauty", "Fashion & Beauty", "👗", "Outfits, makeup tutorials & aesthetics"),
+        com.example.model.VideoCategory("cat_travel", "Travel & Vlog", "✈️", "Daily life, scenery, destinations & culture"),
+        com.example.model.VideoCategory("cat_fitness", "Sports & Fitness", "🏋️", "Workouts, soccer, motivation & health"),
+        com.example.model.VideoCategory("cat_edu", "Education & Life", "📚", "Quick tips, tutorials, facts & language"),
+        com.example.model.VideoCategory("cat_art", "Art & Animation", "🎨", "Digital drawing, 3D animations & crafts"),
+        com.example.model.VideoCategory("cat_pets", "Animals & Pets", "🐾", "Cute cats, dogs, wildlife & pet moments")
+    )
 }

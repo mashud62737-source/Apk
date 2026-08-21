@@ -64,6 +64,7 @@ fun VideoPlayerView(
     var isBuffering by remember { mutableStateOf(false) }
     var hasError by remember { mutableStateOf(false) }
     var isUserPaused by remember { mutableStateOf(false) }
+    var isPlayerReady by remember { mutableStateOf(false) }
 
     val isImageMedia = remember(video.videoUrl) {
         val url = video.videoUrl.lowercase()
@@ -79,24 +80,29 @@ fun VideoPlayerView(
     val exoPlayer = remember(video.videoUrl, isImageMedia) {
         if (isImageMedia) null
         else {
-            val httpDataSourceFactory = DefaultHttpDataSource.Factory()
-                .setUserAgent("Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36 TokTokApp/1.0")
-                .setAllowCrossProtocolRedirects(true)
-                .setConnectTimeoutMs(15000)
-                .setReadTimeoutMs(15000)
+            try {
+                val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+                    .setUserAgent("Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36 TokTokApp/1.0")
+                    .setAllowCrossProtocolRedirects(true)
+                    .setConnectTimeoutMs(15000)
+                    .setReadTimeoutMs(15000)
 
-            val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
-            val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
+                val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
+                val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
 
-            ExoPlayer.Builder(context)
-                .setMediaSourceFactory(mediaSourceFactory)
-                .build().apply {
-                    val mediaItem = MediaItem.fromUri(video.videoUrl)
-                    setMediaItem(mediaItem)
-                    repeatMode = Player.REPEAT_MODE_ALL
-                    volume = if (isMuted) 0f else 1f
-                    prepare()
-                }
+                ExoPlayer.Builder(context)
+                    .setMediaSourceFactory(mediaSourceFactory)
+                    .build().apply {
+                        val mediaItem = MediaItem.fromUri(video.videoUrl)
+                        setMediaItem(mediaItem)
+                        repeatMode = Player.REPEAT_MODE_ALL
+                        volume = if (isMuted) 0f else 1f
+                        playWhenReady = isPlaying
+                        prepare()
+                    }
+            } catch (e: Exception) {
+                null
+            }
         }
     }
 
@@ -105,6 +111,10 @@ fun VideoPlayerView(
             val listener = object : Player.Listener {
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     isBuffering = playbackState == Player.STATE_BUFFERING
+                    if (playbackState == Player.STATE_READY) {
+                        isPlayerReady = true
+                        hasError = false
+                    }
                 }
 
                 override fun onPlayerError(error: PlaybackException) {
@@ -125,8 +135,10 @@ fun VideoPlayerView(
     LaunchedEffect(isPlaying, isUserPaused, hasError, exoPlayer) {
         if (exoPlayer != null) {
             if (isPlaying && !isUserPaused && !hasError) {
+                exoPlayer.playWhenReady = true
                 exoPlayer.play()
             } else {
+                exoPlayer.playWhenReady = false
                 exoPlayer.pause()
             }
         }
@@ -152,7 +164,7 @@ fun VideoPlayerView(
                 )
             }
     ) {
-        // Thumbnail or full image display
+        // High quality Poster / Thumbnail or photo display
         AsyncImage(
             model = if (isImageMedia) video.videoUrl else video.thumbnailUrl,
             contentDescription = video.caption,
@@ -160,18 +172,25 @@ fun VideoPlayerView(
             modifier = Modifier.fillMaxSize()
         )
 
-        // ExoPlayer view for videos
+        // ExoPlayer view for videos with transparent shutter background to eliminate black screens
         if (!isImageMedia && exoPlayer != null && !hasError) {
             AndroidView(
                 factory = { ctx ->
                     PlayerView(ctx).apply {
                         player = exoPlayer
                         useController = false
+                        setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
+                        setKeepContentOnPlayerReset(true)
                         resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                         layoutParams = FrameLayout.LayoutParams(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             ViewGroup.LayoutParams.MATCH_PARENT
                         )
+                    }
+                },
+                update = { playerView ->
+                    if (playerView.player != exoPlayer) {
+                        playerView.player = exoPlayer
                     }
                 },
                 modifier = Modifier.fillMaxSize()

@@ -14,10 +14,24 @@ data class User(
     val followingCount: Int = 0,
     val likesCount: Int = 0,
     val isFollowedByMe: Boolean = false,
-    val isVerified: Boolean = false,
+    val followsMe: Boolean = false, // TikTok Mutual Follow-Back / "Friends" state
+    val isVerified: Boolean = false, // Blue Tick ✅
+    val verifiedCategory: String = "Content Creator",
+    val nidStatus: String = "UNVERIFIED", // UNVERIFIED, PENDING, VERIFIED
+    val nidFrontUri: String? = null,
+    val nidBackUri: String? = null,
+    val nidNumber: String? = null,
+    val realName: String? = null,
     val isAdmin: Boolean = false,
     val email: String = "",
-    val joinedDate: String = "August 2026"
+    val joinedDate: String = "August 2026",
+    // TikTok Privacy & Safety Settings
+    val isPrivateAccount: Boolean = false,
+    val allowDirectMessages: String = "Everyone", // Everyone, Friends, No one
+    val allowDownloads: Boolean = true,
+    val allowDuet: Boolean = true,
+    val allowStitch: Boolean = true,
+    val filterComments: Boolean = false
 )
 
 @Entity(tableName = "videos")
@@ -30,6 +44,7 @@ data class Video(
     val videoUrl: String,
     val thumbnailUrl: String,
     val caption: String,
+    val category: String = "Trending",
     val hashtags: List<String> = emptyList(),
     val musicTitle: String = "Original Sound - @$userHandle",
     val musicAuthor: String = userName,
@@ -54,9 +69,21 @@ data class Comment(
     val userHandle: String,
     val userAvatarUrl: String,
     val text: String,
+    val isCreatorVerified: Boolean = false,
     val likesCount: Int = 0,
     val isLikedByMe: Boolean = false,
     val createdAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "direct_messages")
+data class DirectMessage(
+    @PrimaryKey val id: String,
+    val senderId: String,
+    val receiverId: String,
+    val text: String,
+    val mediaUrl: String? = null,
+    val timestamp: Long = System.currentTimeMillis(),
+    val isRead: Boolean = false
 )
 
 @Entity(tableName = "notifications")
@@ -78,6 +105,8 @@ enum class NotificationType {
     COMMENT,
     FOLLOW,
     MENTION,
+    MESSAGE,
+    VERIFICATION,
     SYSTEM
 }
 
@@ -95,4 +124,11 @@ data class SoundItem(
     val durationSec: Int,
     val usageCount: String,
     val coverUrl: String
+)
+
+data class VideoCategory(
+    val id: String,
+    val title: String,
+    val iconEmoji: String,
+    val description: String
 )

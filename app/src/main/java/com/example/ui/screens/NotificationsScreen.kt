@@ -25,6 +25,8 @@ import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Mail
+import androidx.compose.material.icons.filled.Message
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Star
@@ -62,7 +64,8 @@ fun NotificationsScreen(
     onMarkAllRead: () -> Unit,
     onNotificationClick: (NotificationItem) -> Unit,
     onUserClick: (String) -> Unit,
-    onFollowBack: (String) -> Unit
+    onFollowBack: (String) -> Unit,
+    onOpenDirectMessages: () -> Unit = {}
 ) {
     var selectedFilter by remember { mutableStateOf("All") }
     val filterTabs = listOf("All", "Likes", "Comments", "Followers")
@@ -91,35 +94,100 @@ fun NotificationsScreen(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = "Activity & Inbox",
+                text = "Inbox & Activity",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground
             )
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .clickable { onMarkAllRead() }
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.DoneAll,
-                    contentDescription = "Mark all read",
-                    tint = TokTokCyan,
-                    modifier = Modifier.size(16.dp)
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Direct Messages / Chat Shortcut
+                IconButton(onClick = onOpenDirectMessages) {
+                    Icon(
+                        imageVector = Icons.Default.Message,
+                        contentDescription = "Direct Messages",
+                        tint = TokTokPink
+                    )
+                }
+
                 Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = "Mark all read",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable { onMarkAllRead() }
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.DoneAll,
+                        contentDescription = "Mark all read",
+                        tint = TokTokCyan,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Mark all read",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
             }
         }
+
+        // Direct Messages Banner
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(TokTokCyan.copy(alpha = 0.12f))
+                .clickable { onOpenDirectMessages() }
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(TokTokCyan),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Message,
+                        contentDescription = null,
+                        tint = Color.Black,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = "Direct Messages",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Chat with creators, mutual friends & share videos",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Text(
+                text = "Open >",
+                fontWeight = FontWeight.Bold,
+                color = TokTokCyan,
+                fontSize = 12.sp
+            )
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
 
         // Category Filter Chips
         LazyRow(
@@ -242,6 +310,8 @@ private fun NotificationRow(
                 NotificationType.COMMENT -> TokTokCyan
                 NotificationType.FOLLOW -> Color(0xFF7C4DFF)
                 NotificationType.MENTION -> Color(0xFFFF9800)
+                NotificationType.MESSAGE -> TokTokCyan
+                NotificationType.VERIFICATION -> TokTokCyan
                 NotificationType.SYSTEM -> Color(0xFF4CAF50)
             }
 
@@ -250,6 +320,8 @@ private fun NotificationRow(
                 NotificationType.COMMENT -> Icons.Default.ChatBubble
                 NotificationType.FOLLOW -> Icons.Default.PersonAdd
                 NotificationType.MENTION -> Icons.Default.Star
+                NotificationType.MESSAGE -> Icons.Default.Message
+                NotificationType.VERIFICATION -> Icons.Default.Check
                 NotificationType.SYSTEM -> Icons.Default.Check
             }
 
@@ -264,49 +336,55 @@ private fun NotificationRow(
                     imageVector = badgeIcon,
                     contentDescription = null,
                     tint = Color.White,
-                    modifier = Modifier.size(10.dp)
+                    modifier = Modifier.size(11.dp)
                 )
             }
         }
 
         Spacer(modifier = Modifier.width(12.dp))
 
-        // Text & Timestamp
+        // Message text
         Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = notif.sourceUserName,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
             Text(
-                text = "${notif.sourceUserName} ${notif.message}",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = if (!notif.isRead) FontWeight.Bold else FontWeight.Normal,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 13.5.sp
+                text = notif.message,
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 16.sp
             )
-            Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = formatTimeAgo(notif.timestamp),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
             )
         }
 
         Spacer(modifier = Modifier.width(8.dp))
 
-        // Trailing thumbnail or follow button
+        // Action right side (Follow button or Video Thumbnail)
         if (notif.type == NotificationType.FOLLOW) {
             Button(
                 onClick = onFollowBack,
                 colors = ButtonDefaults.buttonColors(containerColor = TokTokPink),
                 shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
             ) {
-                Text("Follow Back", fontSize = 11.5.sp, color = Color.White)
+                Text("Follow back", fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
         } else if (notif.videoThumbnail != null) {
             AsyncImage(
                 model = notif.videoThumbnail,
-                contentDescription = "Video thumbnail",
+                contentDescription = "Target video",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
-                    .size(width = 38.dp, height = 50.dp)
+                    .size(44.dp)
                     .clip(RoundedCornerShape(6.dp))
             )
         }

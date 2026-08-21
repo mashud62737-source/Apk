@@ -50,7 +50,9 @@ enum class ScreenTab {
     UPLOAD,
     NOTIFICATIONS,
     PROFILE,
-    ADMIN
+    ADMIN,
+    DIRECT_MESSAGES,
+    SETTINGS
 }
 
 @Composable

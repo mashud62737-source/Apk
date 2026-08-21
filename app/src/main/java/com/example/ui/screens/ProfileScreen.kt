@@ -1,6 +1,9 @@
 package com.example.ui.screens
 
+import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,30 +24,27 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Message
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SwapHoriz
-import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -67,7 +67,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -75,8 +74,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.data.MediaStorageHelper
 import com.example.model.User
 import com.example.model.Video
+import com.example.ui.components.VerifiedBadge
 import com.example.ui.components.formatCount
 import com.example.ui.theme.TokTokCyan
 import com.example.ui.theme.TokTokPink
@@ -94,11 +95,24 @@ fun ProfileScreen(
     onUpdateProfile: (String, String, String, String) -> Unit,
     onVideoClick: (Video) -> Unit,
     onOpenAdmin: () -> Unit,
-    onSwitchAccountClick: () -> Unit
+    onSwitchAccountClick: () -> Unit,
+    onOpenSettings: () -> Unit = {},
+    onOpenChat: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     var showEditProfileDialog by remember { mutableStateOf(false) }
+
+    // Direct Avatar Picker for Profile Picture
+    val avatarPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null && user != null) {
+            val localPath = MediaStorageHelper.saveImageToInternalStorage(context, uri, "profile_avatar")
+            onUpdateProfile(user.displayName, user.username, user.bio, localPath)
+            Toast.makeText(context, "Profile picture updated! ✨", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     val tabs = listOf(
         Pair("Videos", Icons.Default.PlayArrow),
@@ -128,12 +142,18 @@ fun ProfileScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(
-                text = user.displayName,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = user.displayName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                if (user.isVerified) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    VerifiedBadge(size = 15.dp)
+                }
+            }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // Theme Toggle
@@ -146,6 +166,15 @@ fun ProfileScreen(
                 }
 
                 if (isCurrentUser) {
+                    // TikTok Settings & Verification Shortcut
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "TikTok Settings",
+                            tint = TokTokPink
+                        )
+                    }
+
                     // Admin Shortcut
                     IconButton(onClick = onOpenAdmin) {
                         Icon(
@@ -160,7 +189,7 @@ fun ProfileScreen(
                         Icon(
                             imageVector = Icons.Default.SwapHoriz,
                             contentDescription = "Switch Account",
-                            tint = TokTokPink
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
@@ -176,12 +205,17 @@ fun ProfileScreen(
                 .padding(top = 16.dp, start = 16.dp, end = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Large Avatar with gradient ring
+            // Large Avatar with gradient ring and tap-to-change
             Box(
                 modifier = Modifier
-                    .size(92.dp)
+                    .size(94.dp)
                     .clip(CircleShape)
-                    .border(2.5.dp, TokTokPink, CircleShape),
+                    .border(2.5.dp, TokTokPink, CircleShape)
+                    .clickable {
+                        if (isCurrentUser) {
+                            avatarPickerLauncher.launch("image/*")
+                        }
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 AsyncImage(
@@ -189,9 +223,27 @@ fun ProfileScreen(
                     contentDescription = user.displayName,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
-                        .size(86.dp)
+                        .size(88.dp)
                         .clip(CircleShape)
                 )
+
+                if (isCurrentUser) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(26.dp)
+                            .clip(CircleShape)
+                            .background(TokTokPink),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AddPhotoAlternate,
+                            contentDescription = "Change photo",
+                            tint = Color.White,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -205,14 +257,19 @@ fun ProfileScreen(
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 if (user.isVerified) {
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Icon(
-                        imageVector = Icons.Default.CheckCircle,
-                        contentDescription = "Verified",
-                        tint = TokTokCyan,
-                        modifier = Modifier.size(18.dp)
-                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    VerifiedBadge(size = 18.dp)
                 }
+            }
+
+            if (user.isVerified && user.verifiedCategory.isNotBlank()) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Verified ${user.verifiedCategory}",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TokTokCyan
+                )
             }
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -245,7 +302,7 @@ fun ProfileScreen(
             // Action Buttons
             if (isCurrentUser) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(0.9f),
+                    modifier = Modifier.fillMaxWidth(0.92f),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Button(
@@ -260,23 +317,36 @@ fun ProfileScreen(
                     }
 
                     OutlinedButton(
-                        onClick = {
-                            Toast.makeText(context, "Profile link copied to clipboard!", Toast.LENGTH_SHORT).show()
-                        },
+                        onClick = onOpenSettings,
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Icon(imageVector = Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Icon(imageVector = Icons.Default.Settings, contentDescription = null, tint = TokTokPink, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Share Profile", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Settings", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
                     }
                 }
             } else {
                 Row(
-                    modifier = Modifier.fillMaxWidth(0.9f),
+                    modifier = Modifier.fillMaxWidth(0.92f),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    if (user.isFollowedByMe) {
+                    // Mutual Follow-Back / "Friends" System like TikTok
+                    val isFriends = user.isFollowedByMe && user.followsMe
+                    val isFollowBack = !user.isFollowedByMe && user.followsMe
+                    val isFollowing = user.isFollowedByMe && !user.followsMe
+
+                    if (isFriends) {
+                        // Mutual Friends
+                        OutlinedButton(
+                            onClick = { onToggleFollow(user.id, true) },
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Friends 👥", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TokTokCyan)
+                        }
+                    } else if (isFollowing) {
+                        // Following
                         OutlinedButton(
                             onClick = { onToggleFollow(user.id, true) },
                             shape = RoundedCornerShape(8.dp),
@@ -284,7 +354,18 @@ fun ProfileScreen(
                         ) {
                             Text("Following", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         }
+                    } else if (isFollowBack) {
+                        // They follow you -> Follow Back
+                        Button(
+                            onClick = { onToggleFollow(user.id, false) },
+                            colors = ButtonDefaults.buttonColors(containerColor = TokTokPink),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Follow Back", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
                     } else {
+                        // Standard Follow
                         Button(
                             onClick = { onToggleFollow(user.id, false) },
                             colors = ButtonDefaults.buttonColors(containerColor = TokTokPink),
@@ -295,14 +376,15 @@ fun ProfileScreen(
                         }
                     }
 
+                    // Direct Message Button
                     Button(
-                        onClick = {
-                            Toast.makeText(context, "Direct messaging with @${user.username}!", Toast.LENGTH_SHORT).show()
-                        },
+                        onClick = { onOpenChat(user.id) },
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.weight(1f)
                     ) {
+                        Icon(imageVector = Icons.Default.Message, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text("Message", color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
@@ -436,13 +518,45 @@ fun ProfileScreen(
         var editBio by remember { mutableStateOf(user.bio) }
         var editAvatar by remember { mutableStateOf(user.avatarUrl) }
 
+        val editPhotoLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.GetContent()) { uri ->
+            if (uri != null) {
+                editAvatar = MediaStorageHelper.saveImageToInternalStorage(context, uri, "edit_profile_pic")
+            }
+        }
+
         AlertDialog(
             onDismissRequest = { showEditProfileDialog = false },
             title = {
                 Text("Edit Profile", fontWeight = FontWeight.Bold)
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Avatar with tap to change
+                    Box(
+                        modifier = Modifier
+                            .size(72.dp)
+                            .clip(CircleShape)
+                            .border(2.dp, TokTokPink, CircleShape)
+                            .clickable { editPhotoLauncher.launch("image/*") },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        AsyncImage(
+                            model = editAvatar,
+                            contentDescription = "Avatar",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    Text(
+                        text = "Tap to change photo",
+                        fontSize = 11.sp,
+                        color = TokTokPink,
+                        modifier = Modifier.clickable { editPhotoLauncher.launch("image/*") }
+                    )
+
                     OutlinedTextField(
                         value = editName,
                         onValueChange = { editName = it },
@@ -450,18 +564,22 @@ fun ProfileScreen(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
+
                     OutlinedTextField(
                         value = editUsername,
-                        onValueChange = { editUsername = it },
+                        onValueChange = { editUsername = it.removePrefix("@") },
                         label = { Text("Username") },
                         singleLine = true,
+                        prefix = { Text("@") },
                         modifier = Modifier.fillMaxWidth()
                     )
+
                     OutlinedTextField(
                         value = editBio,
                         onValueChange = { editBio = it },
                         label = { Text("Bio") },
-                        maxLines = 3,
+                        minLines = 2,
+                        maxLines = 4,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -469,13 +587,15 @@ fun ProfileScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        onUpdateProfile(editName, editUsername, editBio, editAvatar)
-                        showEditProfileDialog = false
-                        Toast.makeText(context, "Profile updated!", Toast.LENGTH_SHORT).show()
+                        if (editName.isNotBlank() && editUsername.isNotBlank()) {
+                            onUpdateProfile(editName, editUsername, editBio, editAvatar)
+                            showEditProfileDialog = false
+                            Toast.makeText(context, "Profile updated! ✨", Toast.LENGTH_SHORT).show()
+                        }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = TokTokPink)
                 ) {
-                    Text("Save Changes", color = Color.White)
+                    Text("Save Changes")
                 }
             },
             dismissButton = {
@@ -488,12 +608,12 @@ fun ProfileScreen(
 }
 
 @Composable
-private fun ProfileStatColumn(count: String, label: String) {
+fun ProfileStatColumn(count: String, label: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             text = count,
             style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Black,
+            fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface
         )
         Text(

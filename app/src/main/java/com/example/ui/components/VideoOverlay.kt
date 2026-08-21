@@ -36,7 +36,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Share
@@ -155,48 +154,47 @@ fun VideoOverlay(
 
             Spacer(modifier = Modifier.width(8.dp))
 
-            // Mute button
-            Box(
+            // Mute / Unmute Button
+            IconButton(
+                onClick = onToggleMute,
                 modifier = Modifier
+                    .size(36.dp)
                     .clip(CircleShape)
-                    .background(Color.Black.copy(alpha = 0.4f))
-                    .clickable { onToggleMute() }
-                    .padding(8.dp)
+                    .background(Color.Black.copy(alpha = 0.45f))
             ) {
                 Icon(
                     imageVector = if (isMuted) Icons.Outlined.VolumeMute else Icons.Outlined.VolumeUp,
                     contentDescription = if (isMuted) "Unmute" else "Mute",
                     tint = Color.White,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }
 
-        // Right side action panel
+        // Right side action bar (Avatar, Like, Comment, Save, Share, Algo Disc)
         Column(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(bottom = 70.dp),
+                .padding(bottom = 70.dp, end = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Creator Avatar with Follow Badge
+            // Creator Avatar with Follow Button
             Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.padding(bottom = 6.dp)
+                modifier = Modifier.size(54.dp),
+                contentAlignment = Alignment.Center
             ) {
                 AsyncImage(
                     model = video.userAvatarUrl,
                     contentDescription = video.userName,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
-                        .size(48.dp)
+                        .size(46.dp)
                         .clip(CircleShape)
                         .border(1.5.dp, Color.White, CircleShape)
                         .clickable { onCreatorClick(video.userId) }
                 )
 
-                // Follow / Plus Badge
                 if (!video.isFollowedCreator) {
                     Box(
                         modifier = Modifier
@@ -286,6 +284,24 @@ fun VideoOverlay(
                 .fillMaxWidth(0.78f)
                 .padding(bottom = 70.dp, start = 4.dp)
         ) {
+            // Category Tag Pill
+            if (video.category.isNotBlank()) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(TokTokPink.copy(alpha = 0.85f))
+                        .padding(horizontal = 8.dp, vertical = 2.5.dp)
+                ) {
+                    Text(
+                        text = video.category,
+                        color = Color.White,
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+
             // Creator handle & verified badge
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -300,12 +316,7 @@ fun VideoOverlay(
                     fontSize = 16.sp
                 )
                 Spacer(modifier = Modifier.width(6.dp))
-                Icon(
-                    imageVector = Icons.Default.CheckCircle,
-                    contentDescription = "Verified",
-                    tint = TokTokCyan,
-                    modifier = Modifier.size(16.dp)
-                )
+                VerifiedBadge(size = 15.dp)
                 Spacer(modifier = Modifier.width(8.dp))
                 // View count badge
                 Row(
@@ -362,7 +373,6 @@ fun VideoOverlay(
                 modifier = Modifier
                     .padding(bottom = 8.dp)
                     .clickable {
-                        // Extract first hashtag if present
                         val firstTag = video.hashtags.firstOrNull()
                         if (firstTag != null) onHashtagClick(firstTag)
                     }
@@ -399,38 +409,32 @@ fun OverlayActionButton(
     icon: ImageVector,
     count: String,
     tint: Color,
-    onClick: () -> Unit,
-    iconScale: Float = 1f
+    iconScale: Float = 1f,
+    onClick: () -> Unit
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .clickable { onClick() }
-            .padding(2.dp)
+        modifier = Modifier.clickable { onClick() }
     ) {
         Box(
             modifier = Modifier
                 .size(40.dp)
-                .clip(CircleShape)
-                .background(Color.Black.copy(alpha = 0.3f)),
+                .scale(iconScale),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = tint,
-                modifier = Modifier
-                    .size(24.dp)
-                    .scale(iconScale)
+                modifier = Modifier.size(28.dp)
             )
         }
-        Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = count,
             color = Color.White,
             fontSize = 11.5.sp,
             fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.shadow(2.dp, shape = CircleShape)
+            modifier = Modifier.padding(top = 2.dp)
         )
     }
 }

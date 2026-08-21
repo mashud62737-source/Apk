@@ -3,12 +3,14 @@ package com.example.data
 import android.content.Context
 import com.example.data.local.AppDatabase
 import com.example.model.Comment
+import com.example.model.DirectMessage
 import com.example.model.HashtagItem
 import com.example.model.NotificationItem
 import com.example.model.NotificationType
 import com.example.model.SoundItem
 import com.example.model.User
 import com.example.model.Video
+import com.example.model.VideoCategory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -24,6 +26,7 @@ class AppRepository(context: Context) {
     private val userDao = database.userDao()
     private val videoDao = database.videoDao()
     private val commentDao = database.commentDao()
+    private val directMessageDao = database.directMessageDao()
     private val notificationDao = database.notificationDao()
 
     private val _currentUserId = MutableStateFlow("user_me")
@@ -83,6 +86,14 @@ class AppRepository(context: Context) {
     fun searchUsers(query: String): Flow<List<User>> = userDao.searchUsers(query)
 
     fun getCommentsForVideo(videoId: String): Flow<List<Comment>> = commentDao.getCommentsForVideo(videoId)
+
+    fun getMessagesBetween(otherUserId: String): Flow<List<DirectMessage>> {
+        return directMessageDao.getMessagesBetween(_currentUserId.value, otherUserId)
+    }
+
+    fun getAllMessagesForCurrentUser(): Flow<List<DirectMessage>> {
+        return directMessageDao.getAllMessagesForUser(_currentUserId.value)
+    }
 
     suspend fun incrementViewCount(videoId: String) {
         videoDao.incrementViews(videoId)
@@ -145,7 +156,7 @@ class AppRepository(context: Context) {
                 sourceUserId = meUser.id,
                 sourceUserName = meUser.displayName,
                 sourceUserAvatar = meUser.avatarUrl,
-                message = "started following you",
+                message = if (creator.isFollowedByMe) "is now friends with you 👥" else "started following you",
                 timestamp = System.currentTimeMillis(),
                 isRead = false
             )
@@ -163,6 +174,7 @@ class AppRepository(context: Context) {
             userHandle = user.username,
             userAvatarUrl = user.avatarUrl,
             text = text.trim(),
+            isCreatorVerified = user.isVerified,
             likesCount = 0,
             isLikedByMe = false,
             createdAt = System.currentTimeMillis()
@@ -199,17 +211,22 @@ class AppRepository(context: Context) {
         videoDao.incrementShareCount(videoId)
     }
 
+    suspend fun toggleReportVideo(videoId: String, isReported: Boolean) {
+        videoDao.toggleReport(videoId, isReported)
+    }
+
     suspend fun uploadVideo(
         videoUrl: String,
         thumbnailUrl: String,
         caption: String,
+        category: String = "Trending",
         hashtags: List<String>,
         musicTitle: String,
         musicAuthor: String
-    ): Video? {
-        val user = _currentUser.value ?: return null
+    ): Video {
+        val user = _currentUser.value ?: SampleData.initialUsers[0]
         val newVideo = Video(
-            id = "vid_${UUID.randomUUID()}",
+            id = "v_${UUID.randomUUID()}",
             userId = user.id,
             userHandle = user.username,
             userName = user.displayName,
@@ -217,6 +234,7 @@ class AppRepository(context: Context) {
             videoUrl = videoUrl,
             thumbnailUrl = thumbnailUrl,
             caption = caption,
+            category = category,
             hashtags = hashtags,
             musicTitle = musicTitle,
             musicAuthor = musicAuthor,
@@ -227,7 +245,9 @@ class AppRepository(context: Context) {
             isLikedByMe = false,
             isSavedByMe = false,
             isFollowedCreator = false,
-            createdAt = System.currentTimeMillis()
+            createdAt = System.currentTimeMillis(),
+            isPinned = false,
+            isReported = false
         )
         videoDao.insertVideo(newVideo)
         return newVideo
@@ -241,41 +261,151 @@ class AppRepository(context: Context) {
         videoDao.togglePin(videoId, isPinned)
     }
 
-    suspend fun toggleReportVideo(videoId: String, isReported: Boolean) {
-        videoDao.toggleReport(videoId, isReported)
-    }
-
     suspend fun updateProfile(displayName: String, username: String, bio: String, avatarUrl: String) {
         val user = _currentUser.value ?: return
         val updated = user.copy(
-            displayName = displayName,
-            username = username,
-            bio = bio,
-            avatarUrl = if (avatarUrl.isNotEmpty()) avatarUrl else user.avatarUrl
+            displayName = displayName.trim(),
+            username = username.trim().removePrefix("@"),
+            bio = bio.trim(),
+            avatarUrl = avatarUrl.trim()
         )
         userDao.updateUser(updated)
         _currentUser.value = updated
     }
 
+    suspend fun updateAvatar(newAvatarUrl: String) {
+        val user = _currentUser.value ?: return
+        val updated = user.copy(avatarUrl = newAvatarUrl)
+        userDao.updateUser(updated)
+        _currentUser.value = updated
+    }
+
+    /**
+     * NID Verification for Blue Tick ✅
+     */
+    suspend fun submitNidVerification(
+        realName: String,
+        nidNumber: String,
+        category: String,
+        frontUri: String,
+        backUri: String,
+        autoApprove: Boolean = true
+    ) {
+        val user = _currentUser.value ?: return
+        val isApproved = autoApprove
+        val updated = user.copy(
+            realName = realName,
+            nidNumber = nidNumber,
+            verifiedCategory = category,
+            nidFrontUri = frontUri,
+            nidBackUri = backUri,
+            nidStatus = if (isApproved) "VERIFIED" else "PENDING",
+            isVerified = isApproved
+        )
+        userDao.updateUser(updated)
+        _currentUser.value = updated
+
+        // System notification
+        val notif = NotificationItem(
+            id = "notif_verif_${UUID.randomUUID()}",
+            type = NotificationType.VERIFICATION,
+            sourceUserId = "system_toktok",
+            sourceUserName = "TokTok Verification Center",
+            sourceUserAvatar = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200&auto=format&fit=crop&q=80",
+            message = if (isApproved)
+                "🎉 Congratulations! Your National ID verification was approved. You received the Blue Tick badge ✅!"
+            else
+                "📄 Your National ID verification request is currently under review.",
+            timestamp = System.currentTimeMillis(),
+            isRead = false
+        )
+        notificationDao.insertNotification(notif)
+    }
+
+    suspend fun setVerifiedBadge(userId: String, isVerified: Boolean) {
+        val user = userDao.getUserByIdOnce(userId) ?: return
+        val updated = user.copy(isVerified = isVerified, nidStatus = if (isVerified) "VERIFIED" else "UNVERIFIED")
+        userDao.updateUser(updated)
+        if (userId == _currentUserId.value) {
+            _currentUser.value = updated
+        }
+    }
+
+    suspend fun updateTikTokPrivacySettings(
+        isPrivate: Boolean,
+        allowDMs: String,
+        allowDownloads: Boolean,
+        allowDuet: Boolean,
+        allowStitch: Boolean,
+        filterComments: Boolean
+    ) {
+        val user = _currentUser.value ?: return
+        val updated = user.copy(
+            isPrivateAccount = isPrivate,
+            allowDirectMessages = allowDMs,
+            allowDownloads = allowDownloads,
+            allowDuet = allowDuet,
+            allowStitch = allowStitch,
+            filterComments = filterComments
+        )
+        userDao.updateUser(updated)
+        _currentUser.value = updated
+    }
+
+    /**
+     * Direct Messages Chat
+     */
+    suspend fun sendDirectMessage(receiverId: String, text: String, mediaUrl: String? = null): DirectMessage {
+        val sender = _currentUser.value ?: SampleData.initialUsers[0]
+        val message = DirectMessage(
+            id = "msg_${UUID.randomUUID()}",
+            senderId = sender.id,
+            receiverId = receiverId,
+            text = text.trim(),
+            mediaUrl = mediaUrl,
+            timestamp = System.currentTimeMillis(),
+            isRead = false
+        )
+        directMessageDao.insertMessage(message)
+
+        // Notification for receiver
+        val notif = NotificationItem(
+            id = "notif_msg_${UUID.randomUUID()}",
+            type = NotificationType.MESSAGE,
+            sourceUserId = sender.id,
+            sourceUserName = sender.displayName,
+            sourceUserAvatar = sender.avatarUrl,
+            message = "sent you a direct message: \"${text.take(25)}\"",
+            timestamp = System.currentTimeMillis(),
+            isRead = false
+        )
+        notificationDao.insertNotification(notif)
+
+        return message
+    }
+
+    suspend fun markMessagesAsRead(otherUserId: String) {
+        directMessageDao.markMessagesAsRead(otherUserId, _currentUserId.value)
+    }
+
     suspend fun registerUser(username: String, displayName: String, email: String, bio: String): User {
         val newUser = User(
-            id = "user_${UUID.randomUUID().toString().take(8)}",
-            username = username.lowercase().replace(" ", "_"),
-            displayName = displayName,
+            id = "user_${UUID.randomUUID()}",
+            username = username.trim().removePrefix("@"),
+            displayName = displayName.trim(),
             avatarUrl = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80",
-            bio = if (bio.isNotEmpty()) bio else "Hey! I'm using TokTok 📱",
+            bio = bio.trim(),
             followerCount = 0,
             followingCount = 0,
             likesCount = 0,
             isFollowedByMe = false,
             isVerified = false,
             isAdmin = false,
-            email = email,
+            email = email.trim(),
             joinedDate = "August 2026"
         )
         userDao.insertUser(newUser)
-        _currentUserId.value = newUser.id
-        _currentUser.value = newUser
+        switchUser(newUser.id)
         return newUser
     }
 
@@ -288,6 +418,6 @@ class AppRepository(context: Context) {
     }
 
     fun getTrendingHashtags(): List<HashtagItem> = SampleData.trendingHashtags
-
     fun getPopularSounds(): List<SoundItem> = SampleData.popularSounds
+    fun getVideoCategories(): List<VideoCategory> = SampleData.videoCategories
 }
