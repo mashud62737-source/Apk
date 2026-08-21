@@ -1,6 +1,10 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, androidx.media3.common.util.UnstableApi::class)
+
 package com.example.ui.screens
 
 import android.net.Uri
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -35,15 +39,11 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudUpload
-import androidx.compose.material.icons.filled.Dns
-import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.filled.Public
-import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
@@ -63,8 +63,8 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -72,25 +72,31 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import com.example.data.SampleData
 import com.example.model.SoundItem
 import com.example.pipeline.MediaType
 import com.example.pipeline.MediaUploadPipeline
 import com.example.pipeline.PipelineProgressState
-import com.example.pipeline.UploadPipelineStage
 import com.example.ui.theme.TokTokCyan
 import com.example.ui.theme.TokTokPink
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UploadScreen(
     onPublishSuccess: () -> Unit,
@@ -102,16 +108,16 @@ fun UploadScreen(
     val scrollState = rememberScrollState()
 
     var selectedMediaType by remember { mutableStateOf(MediaType.VIDEO) }
-    var selectedVideoUri by remember { mutableStateOf<Uri?>(null) }
-    var selectedVideoUrl by remember {
+    var selectedMediaUri by remember { mutableStateOf<Uri?>(null) }
+    var fallbackMediaUrl by remember {
         mutableStateOf("https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4")
     }
-    var selectedThumbnailUrl by remember {
+    var fallbackThumbnailUrl by remember {
         mutableStateOf("https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&auto=format&fit=crop&q=80")
     }
+
     var caption by remember { mutableStateOf("") }
     var selectedSound by remember { mutableStateOf(popularSounds.firstOrNull() ?: SampleData.popularSounds[0]) }
-    var selectedPrivacy by remember { mutableStateOf("Public") }
 
     var isUploading by remember { mutableStateOf(false) }
     var pipelineState by remember { mutableStateOf<PipelineProgressState?>(null) }
@@ -119,13 +125,38 @@ fun UploadScreen(
     val soundSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showSoundSheet by remember { mutableStateOf(false) }
 
-    val videoPickerLauncher = rememberLauncherForActivityResult(
+    // Media Picker for any media (videos and photos)
+    val mediaPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
-            selectedVideoUri = uri
-            selectedThumbnailUrl = "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&auto=format&fit=crop&q=80"
-            Toast.makeText(context, "Media selected from gallery!", Toast.LENGTH_SHORT).show()
+            selectedMediaUri = uri
+            val mimeType = context.contentResolver.getType(uri) ?: ""
+            if (mimeType.startsWith("image")) {
+                selectedMediaType = MediaType.PHOTO
+            } else if (mimeType.startsWith("video")) {
+                selectedMediaType = MediaType.VIDEO
+            }
+            Toast.makeText(context, "Media loaded successfully!", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // Mini ExoPlayer for real-time video preview in upload screen
+    val previewPlayer = remember(selectedMediaUri, selectedMediaType) {
+        if (selectedMediaUri != null && selectedMediaType == MediaType.VIDEO) {
+            ExoPlayer.Builder(context).build().apply {
+                setMediaItem(MediaItem.fromUri(selectedMediaUri!!))
+                repeatMode = Player.REPEAT_MODE_ALL
+                volume = 0f
+                prepare()
+                playWhenReady = true
+            }
+        } else null
+    }
+
+    DisposableEffect(previewPlayer) {
+        onDispose {
+            previewPlayer?.release()
         }
     }
 
@@ -155,7 +186,7 @@ fun UploadScreen(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = "Creator Studio Upload",
+                text = "Create & Upload",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground
@@ -238,34 +269,58 @@ fun UploadScreen(
                 }
             }
 
-            // Media Source Selector & Preview
+            // Media Source Selector & Live Preview Box
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Video Preview Box
+                // Interactive Media Preview Box (plays selected gallery video or displays photo)
                 Box(
                     modifier = Modifier
-                        .size(width = 110.dp, height = 150.dp)
+                        .size(width = 115.dp, height = 165.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(Color.Black)
-                        .border(1.dp, TokTokPink.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                        .border(1.5.dp, TokTokPink, RoundedCornerShape(12.dp))
                 ) {
-                    AsyncImage(
-                        model = selectedThumbnailUrl,
-                        contentDescription = "Selected media preview",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    if (selectedMediaUri != null && selectedMediaType == MediaType.VIDEO && previewPlayer != null) {
+                        AndroidView(
+                            factory = { ctx ->
+                                PlayerView(ctx).apply {
+                                    player = previewPlayer
+                                    useController = false
+                                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                                    layoutParams = FrameLayout.LayoutParams(
+                                        ViewGroup.LayoutParams.MATCH_PARENT,
+                                        ViewGroup.LayoutParams.MATCH_PARENT
+                                    )
+                                }
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        AsyncImage(
+                            model = selectedMediaUri ?: fallbackThumbnailUrl,
+                            contentDescription = "Selected media preview",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+
+                    // Badge at bottom of preview
                     Box(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
-                            .background(Color.Black.copy(alpha = 0.6f))
-                            .padding(4.dp),
+                            .background(Color.Black.copy(alpha = 0.7f))
+                            .padding(vertical = 4.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("HD 1080p", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = if (selectedMediaUri != null) "Selected ✓" else "Preview",
+                            color = TokTokPink,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
 
@@ -274,9 +329,26 @@ fun UploadScreen(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Gallery Picker
+                    // Gallery Video Picker
                     Button(
-                        onClick = { videoPickerLauncher.launch("video/*") },
+                        onClick = { mediaPickerLauncher.launch("video/*") },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Videocam,
+                            contentDescription = null,
+                            tint = TokTokPink,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Pick Video from Gallery", color = MaterialTheme.colorScheme.onSurface, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    }
+
+                    // Gallery Photo Picker
+                    Button(
+                        onClick = { mediaPickerLauncher.launch("image/*") },
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -284,41 +356,17 @@ fun UploadScreen(
                         Icon(
                             imageVector = Icons.Default.PhotoLibrary,
                             contentDescription = null,
-                            tint = TokTokPink,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Select from Gallery", color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp)
-                    }
-
-                    // Camera Recording
-                    Button(
-                        onClick = {
-                            selectedThumbnailUrl = "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=800&auto=format&fit=crop&q=80"
-                            Toast.makeText(context, "Recorded 15s HD video clip!", Toast.LENGTH_SHORT).show()
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CameraAlt,
-                            contentDescription = null,
                             tint = TokTokCyan,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Record via Camera", color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp)
+                        Text("Pick Photo from Gallery", color = MaterialTheme.colorScheme.onSurface, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     }
 
-                    // Direct Transcoding Preset
+                    // All Files Browse
                     Button(
-                        onClick = {
-                            selectedThumbnailUrl = "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=800&auto=format&fit=crop&q=80"
-                            caption = "Building a next-gen feed engine with HLS transcoding! 🚀⚡️ #techtok #coding #ai"
-                            Toast.makeText(context, "Template loaded!", Toast.LENGTH_SHORT).show()
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        onClick = { mediaPickerLauncher.launch("*/*") },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -326,10 +374,10 @@ fun UploadScreen(
                             imageVector = Icons.Default.AutoAwesome,
                             contentDescription = null,
                             tint = Color(0xFFFF9800),
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Use Trending Template", color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp)
+                        Text("Browse All Files", color = MaterialTheme.colorScheme.onSurface, fontSize = 12.sp)
                     }
                 }
             }
@@ -338,7 +386,7 @@ fun UploadScreen(
             OutlinedTextField(
                 value = caption,
                 onValueChange = { caption = it },
-                label = { Text("Describe your video...") },
+                label = { Text("Describe your creation...") },
                 placeholder = { Text("Add captions, tags and mentions #techtok #fyp @friends") },
                 minLines = 3,
                 maxLines = 5,
@@ -383,10 +431,10 @@ fun UploadScreen(
                 }
             }
 
-            // Presets gallery
+            // Presets gallery for quick demo post
             Column {
                 Text(
-                    text = "Select Video Concept",
+                    text = "Or Pick a Creative Preset",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                 )
@@ -395,13 +443,15 @@ fun UploadScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(sampleTemplates) { (title, url) ->
-                        val isSelected = selectedThumbnailUrl == url
+                        val isSelected = fallbackThumbnailUrl == url && selectedMediaUri == null
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier
                                 .width(90.dp)
                                 .clickable {
-                                    selectedThumbnailUrl = url
+                                    selectedMediaUri = null
+                                    fallbackThumbnailUrl = url
+                                    fallbackMediaUrl = url
                                     caption = "Sharing my $title journey! ✨ #viral #fyp"
                                 }
                         ) {
@@ -527,9 +577,12 @@ fun UploadScreen(
                     }
                     isUploading = true
                     coroutineScope.launch {
+                        val mediaSourceUri = selectedMediaUri?.toString() ?: fallbackMediaUrl
+                        val thumbnailSourceUri = selectedMediaUri?.toString() ?: fallbackThumbnailUrl
+
                         val result = MediaUploadPipeline.processAndUploadMedia(
                             mediaType = selectedMediaType,
-                            rawUri = selectedVideoUrl,
+                            rawUri = mediaSourceUri,
                             caption = caption,
                             hashtags = caption.split(" ").filter { it.startsWith("#") }.map { it.removePrefix("#") }
                         ) { progress ->
@@ -537,8 +590,8 @@ fun UploadScreen(
                         }
 
                         onUploadVideo(
-                            result.masterStreamUrl,
-                            selectedThumbnailUrl,
+                            mediaSourceUri,
+                            thumbnailSourceUri,
                             caption,
                             result.detectedTags,
                             selectedSound.title,
@@ -547,7 +600,7 @@ fun UploadScreen(
 
                         delay(400)
                         isUploading = false
-                        Toast.makeText(context, "🎉 Live in Test Pool ${result.coldStartPoolId}!", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "🎉 Video published to your feed!", Toast.LENGTH_LONG).show()
                         onPublishSuccess()
                     }
                 },

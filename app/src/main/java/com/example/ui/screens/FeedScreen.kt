@@ -1,9 +1,12 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.example.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,15 +25,20 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.LiveTv
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -45,8 +53,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.algorithm.AlgoRecommendationInsight
@@ -61,6 +71,7 @@ import com.example.ui.components.HeartEffect
 import com.example.ui.components.ShareBottomSheet
 import com.example.ui.components.VideoOverlay
 import com.example.ui.components.VideoPlayerView
+import com.example.ui.theme.TokTokCyan
 import com.example.ui.theme.TokTokPink
 import kotlinx.coroutines.launch
 
@@ -69,7 +80,6 @@ enum class FeedType {
     FOR_YOU
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FeedScreen(
     forYouVideos: List<Video>,
@@ -89,6 +99,7 @@ fun FeedScreen(
     onCreatorClick: (String) -> Unit,
     onSearchClick: () -> Unit,
     onHashtagClick: (String) -> Unit,
+    onNavigateToUpload: () -> Unit = {},
     onGetAlgoInsight: (Video) -> AlgoRecommendationInsight = { video ->
         com.example.algorithm.RecommendationEngine.evaluateVideo("user_me", video, null)
     },
@@ -140,40 +151,105 @@ fun FeedScreen(
             .background(Color.Black)
     ) {
         if (displayVideos.isEmpty()) {
+            // First-Time Clean Empty State (TikTok-Style)
             Box(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 28.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(24.dp)
+                    verticalArrangement = Arrangement.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.LiveTv,
-                        contentDescription = null,
-                        tint = TokTokPink,
-                        modifier = Modifier.size(64.dp)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
+                    // Glowing Icon Avatar
+                    Box(
+                        modifier = Modifier
+                            .size(100.dp)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.radialGradient(
+                                    colors = listOf(
+                                        TokTokPink.copy(alpha = 0.35f),
+                                        TokTokCyan.copy(alpha = 0.15f),
+                                        Color.Transparent
+                                    )
+                                )
+                            )
+                            .border(2.dp, TokTokPink.copy(alpha = 0.6f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Videocam,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(48.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
                     Text(
-                        text = if (selectedFeedType == FeedType.FOLLOWING) "No videos from followed creators" else "No videos available",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        text = if (selectedFeedType == FeedType.FOLLOWING) "No Followed Videos Yet" else "Welcome to TokTok",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White,
+                        textAlign = TextAlign.Center
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
                     Text(
-                        text = if (selectedFeedType == FeedType.FOLLOWING) "Follow some awesome creators to see their latest videos here!" else "Be the first to upload a video!",
+                        text = if (selectedFeedType == FeedType.FOLLOWING)
+                            "Creators you follow will appear here. Explore trending creators and videos in the For You feed!"
+                        else
+                            "Your feed is ready for you. Upload your first video or photo post from your gallery, or discover trending creators!",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(alpha = 0.7f)
+                        color = Color.White.copy(alpha = 0.75f),
+                        textAlign = TextAlign.Center,
+                        lineHeight = 22.sp
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Spacer(modifier = Modifier.height(28.dp))
+
+                    // Action buttons
+                    Button(
+                        onClick = onNavigateToUpload,
+                        colors = ButtonDefaults.buttonColors(containerColor = TokTokPink),
+                        shape = RoundedCornerShape(24.dp),
+                        modifier = Modifier
+                            .fillMaxWidth(0.85f)
+                            .height(50.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Add, contentDescription = null, tint = Color.White)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Create & Upload Media",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
                     if (selectedFeedType == FeedType.FOLLOWING) {
-                        Button(
+                        OutlinedButton(
                             onClick = { selectedFeedType = FeedType.FOR_YOU },
-                            colors = ButtonDefaults.buttonColors(containerColor = TokTokPink)
+                            shape = RoundedCornerShape(24.dp),
+                            modifier = Modifier.fillMaxWidth(0.85f).height(46.dp)
                         ) {
-                            Text("Explore For You Feed")
+                            Text("Switch to For You", color = Color.White, fontSize = 14.sp)
+                        }
+                    } else {
+                        OutlinedButton(
+                            onClick = onSearchClick,
+                            shape = RoundedCornerShape(24.dp),
+                            modifier = Modifier.fillMaxWidth(0.85f).height(46.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.Explore, contentDescription = null, tint = TokTokCyan, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Explore Search & Hashtags", color = Color.White, fontSize = 14.sp)
                         }
                     }
                 }
@@ -263,7 +339,7 @@ fun FeedScreen(
         ) {
             // Live badge / stream icon
             IconButton(
-                onClick = { /* Live stream explore */ },
+                onClick = onNavigateToUpload,
                 modifier = Modifier
                     .size(36.dp)
                     .clip(CircleShape)

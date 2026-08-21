@@ -47,12 +47,18 @@ class AppRepository(context: Context) {
     }
 
     private suspend fun seedDatabaseIfEmpty() {
-        val existingVideos = videoDao.getAllVideos().firstOrNull()
-        if (existingVideos.isNullOrEmpty()) {
+        val existingUsers = userDao.getAllUsers().firstOrNull()
+        if (existingUsers.isNullOrEmpty()) {
             userDao.insertUsers(SampleData.initialUsers)
-            videoDao.insertVideos(SampleData.initialVideos)
-            commentDao.insertComments(SampleData.initialComments)
-            notificationDao.insertNotifications(SampleData.initialNotifications)
+            if (SampleData.initialVideos.isNotEmpty()) {
+                videoDao.insertVideos(SampleData.initialVideos)
+            }
+            if (SampleData.initialComments.isNotEmpty()) {
+                commentDao.insertComments(SampleData.initialComments)
+            }
+            if (SampleData.initialNotifications.isNotEmpty()) {
+                notificationDao.insertNotifications(SampleData.initialNotifications)
+            }
         }
     }
 

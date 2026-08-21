@@ -17,7 +17,7 @@ import com.example.model.Video
         Comment::class,
         NotificationItem::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

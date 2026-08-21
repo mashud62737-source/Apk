@@ -121,6 +121,7 @@ fun TokTokApp(
                         onCreatorClick = { userId -> viewModel.viewUserProfile(userId) },
                         onSearchClick = { viewModel.selectTab(ScreenTab.SEARCH) },
                         onHashtagClick = { tag -> viewModel.searchHashtag(tag) },
+                        onNavigateToUpload = { viewModel.selectTab(ScreenTab.UPLOAD) },
                         onGetAlgoInsight = { video -> viewModel.getAlgoInsight(video) },
                         onRecordTelemetry = { video, telemetry -> viewModel.recordPlaybackInteraction(video, telemetry) }
                     )

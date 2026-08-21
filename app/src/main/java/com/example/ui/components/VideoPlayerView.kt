@@ -1,5 +1,6 @@
 package com.example.ui.components
 
+import android.net.Uri
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.annotation.OptIn
@@ -60,59 +61,79 @@ fun VideoPlayerView(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    var isBuffering by remember { mutableStateOf(true) }
+    var isBuffering by remember { mutableStateOf(false) }
     var hasError by remember { mutableStateOf(false) }
     var isUserPaused by remember { mutableStateOf(false) }
 
-    val exoPlayer = remember(video.videoUrl) {
-        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
-            .setUserAgent("Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36 TokTokApp/1.0")
-            .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(15000)
-            .setReadTimeoutMs(15000)
+    val isImageMedia = remember(video.videoUrl) {
+        val url = video.videoUrl.lowercase()
+        url.endsWith(".jpg") || url.endsWith(".jpeg") || url.endsWith(".png") || url.endsWith(".webp") || url.endsWith(".gif") ||
+        try {
+            val uri = Uri.parse(video.videoUrl)
+            context.contentResolver.getType(uri)?.startsWith("image") == true
+        } catch (_: Exception) {
+            false
+        }
+    }
 
-        val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
-        val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
+    val exoPlayer = remember(video.videoUrl, isImageMedia) {
+        if (isImageMedia) null
+        else {
+            val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+                .setUserAgent("Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36 TokTokApp/1.0")
+                .setAllowCrossProtocolRedirects(true)
+                .setConnectTimeoutMs(15000)
+                .setReadTimeoutMs(15000)
 
-        ExoPlayer.Builder(context)
-            .setMediaSourceFactory(mediaSourceFactory)
-            .build().apply {
-                val mediaItem = MediaItem.fromUri(video.videoUrl)
-                setMediaItem(mediaItem)
-                repeatMode = Player.REPEAT_MODE_ALL
-                volume = if (isMuted) 0f else 1f
-                prepare()
-            }
+            val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
+            val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
+
+            ExoPlayer.Builder(context)
+                .setMediaSourceFactory(mediaSourceFactory)
+                .build().apply {
+                    val mediaItem = MediaItem.fromUri(video.videoUrl)
+                    setMediaItem(mediaItem)
+                    repeatMode = Player.REPEAT_MODE_ALL
+                    volume = if (isMuted) 0f else 1f
+                    prepare()
+                }
+        }
     }
 
     DisposableEffect(exoPlayer) {
-        val listener = object : Player.Listener {
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                isBuffering = playbackState == Player.STATE_BUFFERING
-            }
+        if (exoPlayer != null) {
+            val listener = object : Player.Listener {
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    isBuffering = playbackState == Player.STATE_BUFFERING
+                }
 
-            override fun onPlayerError(error: PlaybackException) {
-                isBuffering = false
-                hasError = true
+                override fun onPlayerError(error: PlaybackException) {
+                    isBuffering = false
+                    hasError = true
+                }
             }
-        }
-        exoPlayer.addListener(listener)
-        onDispose {
-            exoPlayer.removeListener(listener)
-            exoPlayer.release()
-        }
-    }
-
-    LaunchedEffect(isPlaying, isUserPaused, hasError) {
-        if (isPlaying && !isUserPaused && !hasError) {
-            exoPlayer.play()
+            exoPlayer.addListener(listener)
+            onDispose {
+                exoPlayer.removeListener(listener)
+                exoPlayer.release()
+            }
         } else {
-            exoPlayer.pause()
+            onDispose { }
         }
     }
 
-    LaunchedEffect(isMuted) {
-        exoPlayer.volume = if (isMuted) 0f else 1f
+    LaunchedEffect(isPlaying, isUserPaused, hasError, exoPlayer) {
+        if (exoPlayer != null) {
+            if (isPlaying && !isUserPaused && !hasError) {
+                exoPlayer.play()
+            } else {
+                exoPlayer.pause()
+            }
+        }
+    }
+
+    LaunchedEffect(isMuted, exoPlayer) {
+        exoPlayer?.volume = if (isMuted) 0f else 1f
     }
 
     Box(
@@ -131,16 +152,16 @@ fun VideoPlayerView(
                 )
             }
     ) {
-        // Thumbnail preview background
+        // Thumbnail or full image display
         AsyncImage(
-            model = video.thumbnailUrl,
+            model = if (isImageMedia) video.videoUrl else video.thumbnailUrl,
             contentDescription = video.caption,
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
         )
 
-        // ExoPlayer view
-        if (!hasError) {
+        // ExoPlayer view for videos
+        if (!isImageMedia && exoPlayer != null && !hasError) {
             AndroidView(
                 factory = { ctx ->
                     PlayerView(ctx).apply {
@@ -157,8 +178,8 @@ fun VideoPlayerView(
             )
         }
 
-        // Buffering spinner indicator
-        if (isBuffering && isPlaying && !isUserPaused && !hasError) {
+        // Buffering spinner indicator for videos
+        if (!isImageMedia && isBuffering && isPlaying && !isUserPaused && !hasError) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
