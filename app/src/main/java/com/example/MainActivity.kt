@@ -277,7 +277,8 @@ fun TokTokApp(
                         isDarkTheme = isDarkTheme,
                         onToggleDarkTheme = onToggleDarkTheme,
                         onBack = { currentTab = ScreenTab.PROFILE },
-                        onSwitchAccount = { showAuthSheet = true }
+                        onSwitchAccount = { showAuthSheet = true },
+                        onOpenAdmin = { currentTab = ScreenTab.ADMIN }
                     )
                 }
 

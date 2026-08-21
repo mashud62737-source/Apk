@@ -73,6 +73,9 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import android.content.Intent
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
@@ -149,8 +152,10 @@ fun AdminScreen(
 
     // Master Creator Security Verification Gate
     var isUnlocked by remember { mutableStateOf(currentUser?.isAdmin == true) }
-    var enteredPin by remember { mutableStateOf("") }
-    var pinError by remember { mutableStateOf(false) }
+    var enteredEmail by remember { mutableStateOf("mashud8278@gmail.com") }
+    var enteredPassword by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+    var authError by remember { mutableStateOf<String?>(null) }
 
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf(
@@ -163,7 +168,7 @@ fun AdminScreen(
     )
 
     if (!isUnlocked) {
-        // Master Creator PIN Lock Screen
+        // Master Creator Security Gate
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -191,7 +196,7 @@ fun AdminScreen(
             Spacer(modifier = Modifier.height(20.dp))
 
             Text(
-                text = "BDTOK Master Creator Portal",
+                text = "BDTOK Master Admin Portal",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground
@@ -200,7 +205,7 @@ fun AdminScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Only the Master Creator can access app controls, review accounts, delete users, change video privacy, and manage platform ads.",
+                text = "Restricted Area: Only authorized Master Administrator can access monetization, app ads, database backups, and privacy controls.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -209,73 +214,94 @@ fun AdminScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             OutlinedTextField(
-                value = enteredPin,
+                value = enteredEmail,
                 onValueChange = {
-                    enteredPin = it
-                    pinError = false
+                    enteredEmail = it
+                    authError = null
                 },
-                label = { Text("Master PIN (Default: 1234)") },
+                label = { Text("Master Admin Email") },
                 singleLine = true,
-                isError = pinError,
                 leadingIcon = {
-                    Icon(imageVector = Icons.Default.Lock, contentDescription = null, tint = TokTokCyan)
+                    Icon(imageVector = Icons.Default.Email, contentDescription = null, tint = TokTokPink)
                 },
-                modifier = Modifier.fillMaxWidth(0.85f),
+                modifier = Modifier.fillMaxWidth(0.9f),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = TokTokPink,
                     unfocusedBorderColor = MaterialTheme.colorScheme.outline
                 )
             )
 
-            if (pinError) {
+            Spacer(modifier = Modifier.height(12.dp))
+
+            OutlinedTextField(
+                value = enteredPassword,
+                onValueChange = {
+                    enteredPassword = it
+                    authError = null
+                },
+                label = { Text("Admin Password") },
+                singleLine = true,
+                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                        Icon(
+                            imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                            contentDescription = if (passwordVisible) "Hide password" else "Show password"
+                        )
+                    }
+                },
+                leadingIcon = {
+                    Icon(imageVector = Icons.Default.Lock, contentDescription = null, tint = TokTokCyan)
+                },
+                modifier = Modifier.fillMaxWidth(0.9f),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = TokTokPink,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                )
+            )
+
+            if (authError != null) {
                 Text(
-                    text = "Incorrect PIN. Try default '1234' or tap Creator Unlock.",
+                    text = authError!!,
                     color = MaterialTheme.colorScheme.error,
                     fontSize = 12.sp,
-                    modifier = Modifier.padding(top = 4.dp)
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(top = 8.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             Button(
                 onClick = {
-                    if (enteredPin.trim() == "1234" || enteredPin.trim() == "0000" || enteredPin.trim() == "admin") {
+                    val emailTrimmed = enteredEmail.trim().lowercase()
+                    val passTrimmed = enteredPassword.trim()
+
+                    val isEmailValid = emailTrimmed == "mashud8278@gmail.com" || emailTrimmed == "mashud62737@gmail.com"
+                    val isPassValid = passTrimmed == "Rana*123#"
+
+                    if (isEmailValid && isPassValid) {
                         isUnlocked = true
-                        Toast.makeText(context, "👑 Master Creator Access Granted!", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "👑 Master Admin Access Granted! Welcome Mashud.", Toast.LENGTH_SHORT).show()
+                    } else if (!isEmailValid) {
+                        authError = "❌ Unauthorized Email: Only registered Admin (mashud8278@gmail.com) has access."
                     } else {
-                        pinError = true
+                        authError = "❌ Incorrect Password! Access Denied."
                     }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = TokTokPink),
-                modifier = Modifier.fillMaxWidth(0.85f),
+                modifier = Modifier.fillMaxWidth(0.9f),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Icon(imageVector = Icons.Default.LockOpen, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Unlock Creator Controls", fontWeight = FontWeight.Bold)
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            OutlinedButton(
-                onClick = {
-                    // Quick Creator Bypass for active admin account
-                    isUnlocked = true
-                    Toast.makeText(context, "👑 Verified Master Creator Logged In", Toast.LENGTH_SHORT).show()
-                },
-                modifier = Modifier.fillMaxWidth(0.85f),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Icon(imageVector = Icons.Default.Shield, contentDescription = null, tint = TokTokCyan)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Authenticate as @${currentUser?.username ?: "creator"}", color = TokTokCyan)
+                Text("Unlock Admin Controls", fontWeight = FontWeight.Bold)
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
             TextButton(onClick = onBack) {
-                Text("Return to Profile", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Return to Settings", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         return

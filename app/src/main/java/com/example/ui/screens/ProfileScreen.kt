@@ -30,9 +30,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.Android
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LightMode
@@ -41,10 +46,16 @@ import androidx.compose.material.icons.filled.Message
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.SwapHoriz
+import android.content.Intent
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -100,6 +111,7 @@ fun ProfileScreen(
     onOpenChat: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     var showEditProfileDialog by remember { mutableStateOf(false) }
 
@@ -331,20 +343,28 @@ fun ProfileScreen(
                         }
                     }
 
-                    // Prominent Master Creator Control Panel button for Creator
-                    Button(
-                        onClick = onOpenAdmin,
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
+                    // Share Profile button
+                    OutlinedButton(
+                        onClick = {
+                            val sendIntent = Intent().apply {
+                                action = Intent.ACTION_SEND
+                                putExtra(Intent.EXTRA_TEXT, "Check out @${user.username} on BDTOK: https://bdtok.app/@${user.username}")
+                                type = "text/plain"
+                            }
+                            val shareIntent = Intent.createChooser(sendIntent, "Share Profile")
+                            context.startActivity(shareIntent)
+                        },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurface),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(imageVector = Icons.Default.AdminPanelSettings, contentDescription = null, tint = TokTokCyan, modifier = Modifier.size(17.dp))
+                        Icon(imageVector = Icons.Default.Share, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "👑 Master Creator Control Panel",
+                            text = "Share Profile",
                             fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TokTokCyan
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }

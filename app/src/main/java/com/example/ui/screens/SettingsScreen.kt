@@ -59,6 +59,12 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -119,11 +125,19 @@ fun SettingsScreen(
     isDarkTheme: Boolean,
     onToggleDarkTheme: () -> Unit,
     onBack: () -> Unit,
-    onSwitchAccount: () -> Unit
+    onSwitchAccount: () -> Unit,
+    onOpenAdmin: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val currentUser by viewModel.currentUser.collectAsState()
+
+    // Master Admin Login States
+    var showAdminLoginDialog by remember { mutableStateOf(false) }
+    var adminEmailInput by remember { mutableStateOf("mashud8278@gmail.com") }
+    var adminPasswordInput by remember { mutableStateOf("") }
+    var adminPasswordVisible by remember { mutableStateOf(false) }
+    var adminAuthError by remember { mutableStateOf<String?>(null) }
 
     // Sheet states for all TikTok Settings
     var showAccountDetailsSheet by remember { mutableStateOf(false) }
@@ -601,6 +615,24 @@ fun SettingsScreen(
                 )
             }
 
+            // ==================== 5b. ADMIN & AD SETTINGS (RESTRICTED) ====================
+            item { SettingsSectionHeader(title = "ADMIN & AD SETTINGS (RESTRICTED)") }
+
+            item {
+                SettingsTile(
+                    icon = Icons.Default.AdminPanelSettings,
+                    iconTint = TokTokCyan,
+                    title = "Admin & Ad Settings",
+                    subtitle = "Master Administrator Portal • App Ads, Database, Users & Platform Controls",
+                    onClick = {
+                        adminEmailInput = "mashud8278@gmail.com"
+                        adminPasswordInput = ""
+                        adminAuthError = null
+                        showAdminLoginDialog = true
+                    }
+                )
+            }
+
             // ==================== 6. LOGIN ====================
             item { SettingsSectionHeader(title = "LOGIN") }
 
@@ -631,6 +663,105 @@ fun SettingsScreen(
     // ==========================================
     // MODAL BOTTOM SHEETS & DIALOGS
     // ==========================================
+
+    // Master Admin & Ad Control Login Dialog
+    if (showAdminLoginDialog) {
+        AlertDialog(
+            onDismissRequest = { showAdminLoginDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(imageVector = Icons.Default.AdminPanelSettings, contentDescription = null, tint = TokTokCyan)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Master Admin Login", fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Restricted Master Access: Only the authorized Master Administrator can access App & Ad settings, user management, and system databases.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    OutlinedTextField(
+                        value = adminEmailInput,
+                        onValueChange = {
+                            adminEmailInput = it
+                            adminAuthError = null
+                        },
+                        label = { Text("Admin Email") },
+                        singleLine = true,
+                        leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = TokTokPink) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = adminPasswordInput,
+                        onValueChange = {
+                            adminPasswordInput = it
+                            adminAuthError = null
+                        },
+                        label = { Text("Admin Password") },
+                        singleLine = true,
+                        visualTransformation = if (adminPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { adminPasswordVisible = !adminPasswordVisible }) {
+                                Icon(
+                                    imageVector = if (adminPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                    contentDescription = if (adminPasswordVisible) "Hide password" else "Show password"
+                                )
+                            }
+                        },
+                        leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = TokTokCyan) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    if (adminAuthError != null) {
+                        Text(
+                            text = adminAuthError!!,
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val emailTrimmed = adminEmailInput.trim().lowercase()
+                        val passTrimmed = adminPasswordInput.trim()
+
+                        val isEmailValid = emailTrimmed == "mashud8278@gmail.com" || emailTrimmed == "mashud62737@gmail.com"
+                        val isPassValid = passTrimmed == "Rana*123#"
+
+                        if (isEmailValid && isPassValid) {
+                            showAdminLoginDialog = false
+                            Toast.makeText(context, "👑 Master Admin Access Granted! Welcome Mashud.", Toast.LENGTH_SHORT).show()
+                            onOpenAdmin()
+                        } else if (!isEmailValid) {
+                            adminAuthError = "❌ Unauthorized Email: Only registered Admin (mashud8278@gmail.com) has access."
+                        } else {
+                            adminAuthError = "❌ Incorrect Password! Access Denied."
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = TokTokPink)
+                ) {
+                    Icon(Icons.Default.LockOpen, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Login to Admin Panel")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAdminLoginDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     // 1. Account Details Sheet
     if (showAccountDetailsSheet && currentUser != null) {
